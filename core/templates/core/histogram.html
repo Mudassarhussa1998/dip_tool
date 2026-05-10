@@ -1,0 +1,133 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 5 — Histogram Processing{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">5</span>Histogram Processing</h2>
+    <p class="text-muted mb-0">Equalization, matching, CLAHE, and CDF visualization.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-2">Upload Image</h6>
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-md-6">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-2">Reference Image (for Matching)</h6>
+      <div class="upload-zone" id="refZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click</p>
+        <input type="file" id="refInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-3">
+    <div class="card border-0 h-100"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Operations</h6>
+      <div class="d-grid gap-2">
+        <button class="btn btn-outline-primary btn-sm" onclick="doHist('histogram',{})">Show Histogram</button>
+        <button class="btn btn-primary btn-sm" onclick="doHist('equalize',{})">Histogram Equalization</button>
+        <button class="btn btn-outline-primary btn-sm" onclick="doHist('match',{})">Histogram Matching</button>
+        <div>
+          <label class="form-label d-flex justify-content-between small">Tile Size <span class="badge bg-secondary" id="tileVal">8</span></label>
+          <input type="range" class="form-range" id="tileSize" min="8" max="64" step="8" value="8" oninput="document.getElementById('tileVal').textContent=this.value">
+          <button class="btn btn-outline-secondary btn-sm w-100 mt-1" onclick="doHist('local_eq',{tile_size:document.getElementById('tileSize').value})">Local Hist. Eq.</button>
+        </div>
+        <div>
+          <label class="form-label d-flex justify-content-between small">CLAHE Clip <span class="badge bg-secondary" id="clipVal">2.0</span></label>
+          <input type="range" class="form-range" id="clipLimit" min="0.5" max="10" step="0.5" value="2.0" oninput="document.getElementById('clipVal').textContent=parseFloat(this.value).toFixed(1)">
+          <button class="btn btn-outline-secondary btn-sm w-100 mt-1" onclick="doHist('clahe',{clip_limit:document.getElementById('clipLimit').value,tile_size:document.getElementById('tileSize').value})">CLAHE</button>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-9">
+    <div class="card border-0 mb-3"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Image Comparison</h6>
+      <div class="row g-3">
+        <div class="col-6"><p class="small text-muted">Original</p><img id="origImg" class="img-fluid rounded border" src="" style="min-height:120px;background:#f8f9fa;width:100%"></div>
+        <div class="col-6"><p class="small text-muted">Result</p><img id="resultImg" class="img-fluid rounded border" src="" style="min-height:120px;background:#f8f9fa;width:100%"></div>
+      </div>
+    </div></div>
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Histogram & CDF</h6>
+      <canvas id="histChart" height="180"></canvas>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null, refImage = null, histChartInst = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; document.getElementById('origImg').src = img; });
+setupUpload('refZone','refInput', img => { refImage = img; });
+
+async function doHist(op, params) {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const body = { image: uploadedImage, operation: op, params };
+  if (op === 'match') body.reference_image = refImage || uploadedImage;
+  const r = await postAPI('/api/histogram/', body);
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultImg').src = r.result_image;
+  const hist = r.result_histogram || r.histogram;
+  if (hist && histChartInst) histChartInst.destroy();
+  if (hist) {
+    const datasets = [{
+      label: 'Result Histogram',
+      data: hist.histogram,
+      backgroundColor: 'rgba(79,110,247,0.5)',
+      borderColor: '#4f6ef7',
+      borderWidth: 1,
+      type: 'bar',
+    }];
+    if (hist.cdf) datasets.push({
+      label: 'CDF',
+      data: hist.cdf,
+      borderColor: '#f59e0b',
+      borderWidth: 2,
+      type: 'line',
+      fill: false,
+      pointRadius: 0,
+      yAxisID: 'y2',
+    });
+    if (r.original_histogram) datasets.push({
+      label: 'Original Histogram',
+      data: r.original_histogram.histogram,
+      backgroundColor: 'rgba(239,68,68,0.3)',
+      borderColor: '#ef4444',
+      borderWidth: 1,
+      type: 'bar',
+    });
+    histChartInst = new Chart(document.getElementById('histChart'), {
+      type: 'bar',
+      data: { labels: hist.labels, datasets },
+      options: { responsive: true, scales: {
+        y: { beginAtZero: true },
+        y2: { position: 'right', beginAtZero: true, max: 255, grid: { drawOnChartArea: false } }
+      }, plugins: { legend: { position: 'top' } } }
+    });
+  }
+}
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Histogram Processing Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>Histogram Equalization</h6>
+    <p>Transform: $s_k = T(r_k) = (L-1)\\sum_{j=0}^{k} p_r(r_j)$ where $p_r(r_j) = n_j/MN$</p>
+    <h6>CLAHE</h6>
+    <p>Applies equalization locally in tiles, clips histogram at <em>clipLimit</em> to prevent over-amplification of noise.</p>
+    <h6>Histogram Matching</h6>
+    <p>Find mapping $G^{-1}(T(r))$ such that output histogram matches reference.</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

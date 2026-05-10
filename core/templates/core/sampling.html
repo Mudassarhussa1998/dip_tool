@@ -1,0 +1,96 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 2 — Sampling & Quantization{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">2</span>Sampling, Quantization & Interpolation</h2>
+    <p class="text-muted mb-0">Downsample, upsample with different interpolation methods, and reduce bit depth.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0 h-100"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Parameters</h6>
+      <div class="mb-3">
+        <label class="form-label d-flex justify-content-between">Downsample Factor <span class="badge bg-secondary" id="factorVal">4</span></label>
+        <input type="range" class="form-range" id="factor" min="1" max="16" value="4" oninput="document.getElementById('factorVal').textContent=this.value">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Interpolation Method</label>
+        <select class="form-select" id="method">
+          <option value="nearest">Nearest Neighbor</option>
+          <option value="bilinear" selected>Bilinear</option>
+          <option value="bicubic">Bicubic</option>
+          <option value="lanczos">Lanczos</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label d-flex justify-content-between">Bit Depth <span class="badge bg-secondary" id="bitsVal">8</span></label>
+        <input type="range" class="form-range" id="bits" min="1" max="8" value="8" oninput="document.getElementById('bitsVal').textContent=this.value">
+      </div>
+      <button class="btn btn-primary w-100" id="btnProcess"><i class="bi bi-play me-1"></i>Process</button>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Results</h6>
+      <div class="row g-3" id="resultArea">
+        <div class="col-12 text-center text-muted py-5">Upload an image and click Process</div>
+      </div>
+      <div id="metricsArea" class="mt-3 d-none">
+        <div class="row g-2">
+          <div class="col-6"><div class="metric-badge">Upsampled PSNR: <strong id="upPSNR">—</strong> dB</div></div>
+          <div class="col-6"><div class="metric-badge">Quantized PSNR: <strong id="qPSNR">—</strong> dB</div></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+document.getElementById('btnProcess').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/sampling/', { image: uploadedImage, params: {
+    factor: parseInt(document.getElementById('factor').value),
+    method: document.getElementById('method').value,
+    bits: parseInt(document.getElementById('bits').value)
+  }});
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="col-6 col-md-3"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Downsampled</p><img src="${r.downsampled}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Upsampled</p><img src="${r.upsampled}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Quantized</p><img src="${r.quantized}" class="img-fluid rounded border"></div>`;
+  document.getElementById('metricsArea').classList.remove('d-none');
+  document.getElementById('upPSNR').textContent = r.metrics_upsampled.psnr;
+  document.getElementById('qPSNR').textContent = r.metrics_quantized.psnr;
+});
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Sampling & Quantization Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>Sampling</h6><p>Nyquist theorem: $f_s \\geq 2f_{max}$. Aliasing occurs when undersampled.</p>
+    <h6>Quantization</h6><p>$L = 2^k$ gray levels for $k$-bit image. Quantization error $\\leq \\Delta/2$ where $\\Delta = 255/(L-1)$.</p>
+    <h6>Interpolation</h6>
+    <p><strong>Nearest Neighbor:</strong> $f(x,y) = f(\\lfloor x+0.5\\rfloor, \\lfloor y+0.5\\rfloor)$</p>
+    <p><strong>Bilinear:</strong> $f(x,y) = ax + by + cxy + d$ — uses 4 neighbors.</p>
+    <p><strong>Bicubic:</strong> Uses 16 neighbors, cubic polynomial interpolation.</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

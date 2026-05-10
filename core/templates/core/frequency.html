@@ -1,0 +1,127 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 8/9 — Frequency Domain{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">8/9</span>Frequency Domain Analysis</h2>
+    <p class="text-muted mb-0">FFT spectra, frequency domain filtering, filter transfer functions.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">FFT Analysis</h6>
+      <button class="btn btn-primary w-100 mb-4" id="btnFFT"><i class="bi bi-waveform me-1"></i>Compute FFT</button>
+      <hr>
+      <h6 class="fw-semibold mb-3">Frequency Domain Filter</h6>
+      <div class="mb-2">
+        <label class="form-label">Filter Type</label>
+        <select class="form-select form-select-sm" id="filterType">
+          <option value="ideal_lp">Ideal Low-Pass</option>
+          <option value="ideal_hp">Ideal High-Pass</option>
+          <option value="butter_lp">Butterworth LP</option>
+          <option value="butter_hp">Butterworth HP</option>
+          <option value="gauss_lp" selected>Gaussian LP</option>
+          <option value="gauss_hp">Gaussian HP</option>
+          <option value="bandpass">Band-Pass</option>
+          <option value="notch">Notch Filter</option>
+        </select>
+      </div>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Cutoff (Low) % <span class="badge bg-secondary" id="cutLowVal">30</span></label>
+        <input type="range" class="form-range" id="cutLow" min="1" max="99" value="30" oninput="document.getElementById('cutLowVal').textContent=this.value">
+      </div>
+      <div class="mb-2" id="cutHighRow">
+        <label class="form-label d-flex justify-content-between">Cutoff (High) % <span class="badge bg-secondary" id="cutHighVal">70</span></label>
+        <input type="range" class="form-range" id="cutHigh" min="1" max="99" value="70" oninput="document.getElementById('cutHighVal').textContent=this.value">
+      </div>
+      <div class="mb-3" id="orderRow">
+        <label class="form-label d-flex justify-content-between">Butterworth Order <span class="badge bg-secondary" id="orderVal">2</span></label>
+        <input type="range" class="form-range" id="order" min="1" max="10" value="2" oninput="document.getElementById('orderVal').textContent=this.value">
+      </div>
+      <button class="btn btn-outline-primary w-100" id="btnFilter"><i class="bi bi-funnel me-1"></i>Apply Filter</button>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0 mb-3"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Spectra</h6>
+      <div class="row g-3" id="spectraArea"><div class="col-12 text-center text-muted py-4">Upload and compute FFT</div></div>
+    </div></div>
+    <div class="card border-0 d-none" id="crossCard"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-2 small">1D Cross-Section (center row)</h6>
+      <canvas id="crossChart" height="150"></canvas>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null, crossChart = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+
+document.getElementById('btnFFT').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/frequency/', { image: uploadedImage, operation: 'fft' });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('spectraArea').innerHTML = `
+    <div class="col-6 col-md-3"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Magnitude Spectrum</p><img src="${r.magnitude}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Phase Spectrum</p><img src="${r.phase}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Power Spectrum</p><img src="${r.power}" class="img-fluid rounded border"></div>`;
+  document.getElementById('spectraArea').className = 'row g-3';
+  showCross(r.cross_section, 'Magnitude (log scale)');
+});
+
+document.getElementById('btnFilter').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/frequency/', { image: uploadedImage, operation: 'filter', params: {
+    filter_type: document.getElementById('filterType').value,
+    cutoff_low: document.getElementById('cutLow').value,
+    cutoff_high: document.getElementById('cutHigh').value,
+    order: document.getElementById('order').value
+  }});
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('spectraArea').innerHTML = `
+    <div class="col-6 col-md-3"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Filtered Spectrum</p><img src="${r.filtered_spectrum}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Filter Mask</p><img src="${r.filter_mask}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Reconstructed</p><img src="${r.reconstructed}" class="img-fluid rounded border"></div>`;
+  document.getElementById('spectraArea').className = 'row g-3';
+  showCross(r.cross_section, 'Filter Transfer Function');
+});
+
+function showCross(data, label) {
+  document.getElementById('crossCard').classList.remove('d-none');
+  if (crossChart) crossChart.destroy();
+  crossChart = new Chart(document.getElementById('crossChart'), {
+    type: 'line',
+    data: { labels: data.map((_,i) => i), datasets: [{ label, data, borderColor: '#4f6ef7', borderWidth: 1.5, pointRadius: 0, fill: false }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { display: false } } }
+  });
+}
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Frequency Domain Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>2D DFT</h6><p>$F(u,v) = \\sum_{x=0}^{M-1}\\sum_{y=0}^{N-1} f(x,y)e^{-j2\\pi(ux/M+vy/N)}$</p>
+    <h6>Ideal Low-Pass Filter</h6><p>$H(u,v) = \\begin{cases}1 & D(u,v)\\leq D_0 \\\\ 0 & \\text{otherwise}\\end{cases}$ — causes ringing (Gibbs phenomenon)</p>
+    <h6>Butterworth LP</h6><p>$H(u,v) = \\frac{1}{1+(D(u,v)/D_0)^{2n}}$ — smooth rolloff, no ringing</p>
+    <h6>Gaussian LP</h6><p>$H(u,v) = e^{-D^2(u,v)/2D_0^2}$ — no ringing, smooth</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

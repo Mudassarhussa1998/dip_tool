@@ -1,0 +1,163 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 1 — Introduction & Spectrum{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">1</span>Introduction & Spectrum</h2>
+    <p class="text-muted mb-0">Electromagnetic spectrum, image sensing pipeline, channel separation.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+
+<!-- EM Spectrum SVG -->
+<div class="card border-0 mb-4">
+  <div class="card-body p-4">
+    <h6 class="fw-semibold mb-3">Electromagnetic Spectrum</h6>
+    <div class="em-spectrum-container">
+      <svg viewBox="0 0 900 120" xmlns="http://www.w3.org/2000/svg" class="w-100">
+        <defs>
+          <linearGradient id="specGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#6600cc"/>
+            <stop offset="14%" style="stop-color:#0000ff"/>
+            <stop offset="28%" style="stop-color:#00ccff"/>
+            <stop offset="42%" style="stop-color:#00ff00"/>
+            <stop offset="56%" style="stop-color:#ffff00"/>
+            <stop offset="70%" style="stop-color:#ff6600"/>
+            <stop offset="84%" style="stop-color:#ff0000"/>
+            <stop offset="100%" style="stop-color:#880000"/>
+          </linearGradient>
+        </defs>
+        <rect x="10" y="30" width="880" height="50" rx="8" fill="url(#specGrad)" opacity="0.85"/>
+        <text x="10" y="20" font-size="11" fill="#6600cc" font-weight="bold">Gamma</text>
+        <text x="100" y="20" font-size="11" fill="#0000cc" font-weight="bold">X-Ray</text>
+        <text x="200" y="20" font-size="11" fill="#0066cc" font-weight="bold">UV</text>
+        <text x="330" y="20" font-size="11" fill="#009900" font-weight="bold">Visible</text>
+        <text x="490" y="20" font-size="11" fill="#cc6600" font-weight="bold">Infrared</text>
+        <text x="650" y="20" font-size="11" fill="#cc0000" font-weight="bold">Microwave</text>
+        <text x="800" y="20" font-size="11" fill="#880000" font-weight="bold">Radio</text>
+        <text x="330" y="100" font-size="10" fill="#555">400nm</text>
+        <text x="430" y="100" font-size="10" fill="#555">700nm</text>
+        <line x1="340" y1="80" x2="340" y2="95" stroke="#555" stroke-width="1"/>
+        <line x1="440" y1="80" x2="440" y2="95" stroke="#555" stroke-width="1"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- Sensing Pipeline -->
+<div class="card border-0 mb-4">
+  <div class="card-body p-4">
+    <h6 class="fw-semibold mb-3">Image Sensing Pipeline</h6>
+    <div class="pipeline d-flex align-items-center gap-2 flex-wrap">
+      {% for step in pipeline_steps %}
+      <div class="pipeline-step text-center px-3 py-2">{{ step }}</div>
+      {% if not forloop.last %}<i class="bi bi-arrow-right text-primary fs-5"></i>{% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Upload & Analysis -->
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-upload me-2 text-primary"></i>Upload Image for Analysis</h6>
+        <div class="upload-zone" id="uploadZone">
+          <i class="bi bi-image fs-1 text-muted mb-2"></i>
+          <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+          <input type="file" id="imageInput" accept="image/*" class="d-none">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3">Operations</h6>
+        <div class="d-grid gap-2">
+          <button class="btn btn-primary" id="btnProps"><i class="bi bi-info-circle me-1"></i>Image Properties</button>
+          <button class="btn btn-outline-primary" id="btnChannels"><i class="bi bi-layers me-1"></i>Split RGB Channels</button>
+          <button class="btn btn-outline-secondary" id="btnGray"><i class="bi bi-circle-half me-1"></i>Toggle Grayscale</button>
+        </div>
+        <div id="propsPanel" class="mt-3 d-none">
+          <table class="table table-sm table-bordered">
+            <tbody id="propsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3">Result</h6>
+        <div class="row g-3" id="resultArea">
+          <div class="col-12 text-center text-muted py-5">Upload an image to begin</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+
+document.getElementById('btnProps').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/intro/', { image: uploadedImage, operation: 'properties' });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  const p = r.properties;
+  const rows = [['Width', p.width+'px'],['Height', p.height+'px'],['Channels', p.channels],
+    ['Bit Depth', p.bit_depth],['Min Pixel', p.pixel_min],['Max Pixel', p.pixel_max],
+    ['Mean', p.mean],['Std Dev', p.std]];
+  document.getElementById('propsTable').innerHTML = rows.map(([k,v]) =>
+    `<tr><td class="fw-semibold">${k}</td><td>${v}</td></tr>`).join('');
+  document.getElementById('propsPanel').classList.remove('d-none');
+  document.getElementById('resultArea').innerHTML = `<div class="col-12"><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+});
+
+document.getElementById('btnChannels').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/intro/', { image: uploadedImage, operation: 'channels' });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="col-6 col-md-3"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-danger">Red Channel</p><img src="${r.r_channel}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-success">Green Channel</p><img src="${r.g_channel}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-primary">Blue Channel</p><img src="${r.b_channel}" class="img-fluid rounded border"></div>`;
+});
+
+document.getElementById('btnGray').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/intro/', { image: uploadedImage, operation: 'grayscale' });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6"><p class="small text-muted">Grayscale</p><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+});
+
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Introduction to Digital Image Processing';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <p>A digital image $f(x,y)$ is a 2D function where $x,y$ are spatial coordinates and the amplitude is the <em>intensity</em> or <em>gray level</em>.</p>
+    <p>Digitization involves two steps: <strong>sampling</strong> (spatial discretization) and <strong>quantization</strong> (amplitude discretization).</p>
+    <p>An $M \\times N$ image with $L$ gray levels requires $b = M \\times N \\times \\log_2 L$ bits of storage.</p>
+    <h6 class="mt-3">RGB Color Model</h6>
+    <p>Each pixel has three components: $R, G, B \\in [0, 255]$. Grayscale: $Y = 0.299R + 0.587G + 0.114B$</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

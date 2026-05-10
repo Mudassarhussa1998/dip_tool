@@ -1,0 +1,93 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 13 — Morphological Operations{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">13</span>Morphological Operations</h2>
+    <p class="text-muted mb-0">All 8 morphological operations + boundary extraction, hole filling, skeletonization.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-3">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Parameters</h6>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Threshold <span class="badge bg-secondary" id="threshVal">127</span></label>
+        <input type="range" class="form-range" id="thresh" min="0" max="255" value="127" oninput="document.getElementById('threshVal').textContent=this.value">
+      </div>
+      <div class="mb-2">
+        <label class="form-label">SE Shape</label>
+        <select class="form-select form-select-sm" id="seShape">
+          <option value="rect">Rectangle</option>
+          <option value="ellipse">Ellipse</option>
+          <option value="cross">Cross</option>
+        </select>
+      </div>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">SE Size <span class="badge bg-secondary" id="seSizeVal">3</span></label>
+        <input type="range" class="form-range" id="seSize" min="3" max="21" step="2" value="3" oninput="document.getElementById('seSizeVal').textContent=this.value">
+      </div>
+      <div class="mb-3">
+        <label class="form-label d-flex justify-content-between">Iterations <span class="badge bg-secondary" id="iterVal">1</span></label>
+        <input type="range" class="form-range" id="iterations" min="1" max="10" value="1" oninput="document.getElementById('iterVal').textContent=this.value">
+      </div>
+      <button class="btn btn-primary w-100" id="btnApply"><i class="bi bi-play me-1"></i>Apply All Operations</button>
+    </div></div>
+  </div>
+  <div class="col-lg-9">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Results (2×4 Grid)</h6>
+      <div class="row g-2" id="resultArea"><div class="col-12 text-center text-muted py-5">Upload and apply operations</div></div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+document.getElementById('btnApply').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/morphology/', { image: uploadedImage, params: {
+    threshold: document.getElementById('thresh').value,
+    se_shape: document.getElementById('seShape').value,
+    se_size: document.getElementById('seSize').value,
+    iterations: document.getElementById('iterations').value
+  }});
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  const ops = [
+    ['Binary', r.binary], ['Erosion', r.erosion], ['Dilation', r.dilation], ['Opening', r.opening],
+    ['Closing', r.closing], ['Gradient', r.gradient], ['Top Hat', r.tophat], ['Black Hat', r.blackhat],
+    ['Boundary', r.boundary], ['Hole Fill', r.holes], ['Skeleton', r.skeleton]
+  ];
+  document.getElementById('resultArea').innerHTML = ops.map(([label, src]) =>
+    `<div class="col-6 col-md-4 col-xl-3"><p class="small text-muted">${label}</p><img src="${src}" class="img-fluid rounded border"></div>`
+  ).join('');
+  document.getElementById('resultArea').className = 'row g-2';
+});
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Morphological Operations Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>Erosion</h6><p>$A \\ominus B = \\{z | (B)_z \\subseteq A\\}$ — shrinks objects</p>
+    <h6>Dilation</h6><p>$A \\oplus B = \\{z | (\\hat{B})_z \\cap A \\neq \\emptyset\\}$ — expands objects</p>
+    <h6>Opening</h6><p>$A \\circ B = (A \\ominus B) \\oplus B$ — removes small objects</p>
+    <h6>Closing</h6><p>$A \\bullet B = (A \\oplus B) \\ominus B$ — fills small holes</p>
+    <h6>Morphological Gradient</h6><p>$g = (A \\oplus B) - (A \\ominus B)$ — edge detection</p>
+    <h6>Top Hat</h6><p>$T_{hat}(A) = A - (A \\circ B)$ — bright features on dark background</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

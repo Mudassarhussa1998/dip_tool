@@ -1,0 +1,127 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 3 — Enhancement{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">3</span>Image Enhancement & Point Processing</h2>
+    <p class="text-muted mb-0">Point operations, neighborhood filters, and geometric transformations.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Point Operations</h6>
+      <div class="d-grid gap-2 mb-4">
+        <div class="mb-2">
+          <label class="form-label d-flex justify-content-between">Brightness <span class="badge bg-secondary" id="brightVal">50</span></label>
+          <input type="range" class="form-range" id="brightness" min="-100" max="100" value="50" oninput="document.getElementById('brightVal').textContent=this.value">
+          <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="applyOp('brightness',{value:document.getElementById('brightness').value})">Apply</button>
+        </div>
+        <div class="mb-2">
+          <label class="form-label d-flex justify-content-between">Contrast <span class="badge bg-secondary" id="contrastVal">1.5</span></label>
+          <input type="range" class="form-range" id="contrast" min="0.1" max="5" step="0.1" value="1.5" oninput="document.getElementById('contrastVal').textContent=parseFloat(this.value).toFixed(1)">
+          <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="applyOp('contrast',{value:document.getElementById('contrast').value})">Apply</button>
+        </div>
+        <div class="mb-2">
+          <label class="form-label d-flex justify-content-between">Gamma $\gamma$ <span class="badge bg-secondary" id="gammaVal">1.0</span></label>
+          <input type="range" class="form-range" id="gamma" min="0.1" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('gammaVal').textContent=parseFloat(this.value).toFixed(1)">
+          <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="applyOp('gamma',{value:document.getElementById('gamma').value})">Apply</button>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="applyOp('log',{})">Log Transform</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="applyOp('negative',{})">Negative Image</button>
+        <div class="mb-2">
+          <label class="form-label d-flex justify-content-between">Threshold <span class="badge bg-secondary" id="threshVal">127</span></label>
+          <input type="range" class="form-range" id="thresh" min="0" max="255" value="127" oninput="document.getElementById('threshVal').textContent=this.value">
+          <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="applyOp('threshold',{value:document.getElementById('thresh').value})">Apply</button>
+        </div>
+      </div>
+      <h6 class="fw-semibold mb-3">Neighborhood Filters</h6>
+      <div class="mb-2">
+        <label class="form-label">Kernel Size</label>
+        <select class="form-select form-select-sm" id="ksize">
+          <option value="3">3×3</option><option value="5" selected>5×5</option><option value="7">7×7</option>
+        </select>
+      </div>
+      <div class="d-grid gap-2 mb-4">
+        <button class="btn btn-sm btn-outline-primary" onclick="applyOp('mean_filter',{ksize:document.getElementById('ksize').value})">Mean Filter</button>
+        <div>
+          <label class="form-label d-flex justify-content-between">Sigma <span class="badge bg-secondary" id="sigmaVal">1.0</span></label>
+          <input type="range" class="form-range" id="sigma" min="0.1" max="5" step="0.1" value="1.0" oninput="document.getElementById('sigmaVal').textContent=parseFloat(this.value).toFixed(1)">
+          <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="applyOp('gaussian_filter',{ksize:document.getElementById('ksize').value,sigma:document.getElementById('sigma').value})">Gaussian Filter</button>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" onclick="applyOp('median_filter',{ksize:document.getElementById('ksize').value})">Median Filter</button>
+      </div>
+      <h6 class="fw-semibold mb-3">Geometric Operations</h6>
+      <div class="d-grid gap-2">
+        <div>
+          <label class="form-label d-flex justify-content-between">Rotation Angle <span class="badge bg-secondary" id="angleVal">45</span>°</label>
+          <input type="range" class="form-range" id="angle" min="-180" max="180" value="45" oninput="document.getElementById('angleVal').textContent=this.value">
+          <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="applyOp('rotate',{angle:document.getElementById('angle').value})">Rotate</button>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="applyOp('flip',{direction:'horizontal'})">Flip Horizontal</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="applyOp('flip',{direction:'vertical'})">Flip Vertical</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="applyOp('shear',{shx:0.2,shy:0.0})">Shear</button>
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Side-by-Side Result</h6>
+      <div class="row g-3">
+        <div class="col-6"><p class="small text-muted">Original</p><img id="origImg" class="img-fluid rounded border" src="" style="min-height:150px;background:#f8f9fa;width:100%"></div>
+        <div class="col-6"><p class="small text-muted">Processed</p><img id="resultImg" class="img-fluid rounded border" src="" style="min-height:150px;background:#f8f9fa;width:100%"></div>
+      </div>
+      <div id="metricsRow" class="mt-3 d-none">
+        <div class="row g-2">
+          <div class="col-4"><div class="metric-badge">PSNR: <strong id="mPSNR">—</strong> dB</div></div>
+          <div class="col-4"><div class="metric-badge">MSE: <strong id="mMSE">—</strong></div></div>
+          <div class="col-4"><div class="metric-badge">SSIM: <strong id="mSSIM">—</strong></div></div>
+        </div>
+      </div>
+      <div class="mt-3 d-none" id="downloadRow">
+        <a id="downloadBtn" class="btn btn-sm btn-success" download="result.png"><i class="bi bi-download me-1"></i>Download Result</a>
+      </div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; document.getElementById('origImg').src = img; });
+async function applyOp(op, params) {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/enhancement/', { image: uploadedImage, operation: op, params });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultImg').src = r.result_image;
+  document.getElementById('metricsRow').classList.remove('d-none');
+  document.getElementById('mPSNR').textContent = r.metrics.psnr + ' dB';
+  document.getElementById('mMSE').textContent = r.metrics.mse;
+  document.getElementById('mSSIM').textContent = r.metrics.ssim;
+  document.getElementById('downloadRow').classList.remove('d-none');
+  document.getElementById('downloadBtn').href = r.result_image;
+}
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Enhancement & Point Processing Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>Gamma Correction</h6><p>$s = c \\cdot r^\\gamma$ — corrects display nonlinearity. $\\gamma < 1$ brightens, $\\gamma > 1$ darkens.</p>
+    <h6>Log Transform</h6><p>$s = c \\cdot \\log(1 + r)$ — expands dark pixels, compresses bright ones.</p>
+    <h6>Gaussian Filter</h6><p>$G(x,y) = \\frac{1}{2\\pi\\sigma^2} e^{-\\frac{x^2+y^2}{2\\sigma^2}}$</p>
+    <h6>Rotation</h6><p>$\\begin{pmatrix}x'\\\\y'\\end{pmatrix} = \\begin{pmatrix}\\cos\\theta & -\\sin\\theta \\\\ \\sin\\theta & \\cos\\theta\\end{pmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}$</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

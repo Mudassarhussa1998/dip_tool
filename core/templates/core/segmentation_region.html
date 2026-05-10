@@ -1,0 +1,94 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 12 — Segmentation: Region{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">12</span>Segmentation: Thresholding & Region-Based</h2>
+    <p class="text-muted mb-0">Global/Otsu/adaptive thresholding, region growing, watershed.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Thresholding</h6>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Global Threshold <span class="badge bg-secondary" id="gThreshVal">127</span></label>
+        <input type="range" class="form-range" id="gThresh" min="0" max="255" value="127" oninput="document.getElementById('gThreshVal').textContent=this.value">
+        <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="doSeg('global',{threshold:document.getElementById('gThresh').value})">Apply Global</button>
+      </div>
+      <button class="btn btn-primary w-100 mb-2" onclick="doSeg('otsu',{})">Otsu's Threshold</button>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Block Size <span class="badge bg-secondary" id="blockVal">11</span></label>
+        <input type="range" class="form-range" id="blockSize" min="3" max="51" step="2" value="11" oninput="document.getElementById('blockVal').textContent=this.value">
+        <label class="form-label d-flex justify-content-between">C <span class="badge bg-secondary" id="cVal">2</span></label>
+        <input type="range" class="form-range" id="cParam" min="-10" max="20" value="2" oninput="document.getElementById('cVal').textContent=this.value">
+        <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="doSeg('adaptive',{block_size:document.getElementById('blockSize').value,C:document.getElementById('cParam').value})">Adaptive Threshold</button>
+      </div>
+      <div class="mb-3">
+        <label class="form-label d-flex justify-content-between">Levels <span class="badge bg-secondary" id="levelsVal">3</span></label>
+        <input type="range" class="form-range" id="levels" min="2" max="6" value="3" oninput="document.getElementById('levelsVal').textContent=this.value">
+        <button class="btn btn-sm btn-outline-secondary w-100 mt-1" onclick="doSeg('multi_level',{levels:document.getElementById('levels').value})">Multi-Level Threshold</button>
+      </div>
+      <hr>
+      <h6 class="fw-semibold mb-3">Region-Based</h6>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Tolerance <span class="badge bg-secondary" id="tolVal">20</span></label>
+        <input type="range" class="form-range" id="tolerance" min="1" max="100" value="20" oninput="document.getElementById('tolVal').textContent=this.value">
+        <p class="small text-muted">Click on the result image to set seed point</p>
+        <button class="btn btn-sm btn-outline-primary w-100" id="btnRegionGrow">Region Growing (center seed)</button>
+      </div>
+      <button class="btn btn-outline-primary w-100 mb-2" onclick="doSeg('watershed',{})">Watershed</button>
+      <button class="btn btn-outline-secondary w-100" onclick="doSeg('edge_based',{})">Edge-Based Segmentation</button>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Results</h6>
+      <div class="row g-3" id="resultArea"><div class="col-12 text-center text-muted py-5">Upload and select an operation</div></div>
+      <div id="statsArea" class="mt-3"></div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+async function doSeg(op, params) {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/segmentation-region/', { image: uploadedImage, operation: op, params });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6"><p class="small text-muted">Result</p><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+  document.getElementById('resultArea').className = 'row g-3';
+  if (r.threshold_value !== undefined)
+    document.getElementById('statsArea').innerHTML = `<span class="badge bg-info">Otsu threshold: ${r.threshold_value}</span>`;
+}
+document.getElementById('btnRegionGrow').addEventListener('click', () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  doSeg('region_growing', { tolerance: document.getElementById('tolerance').value });
+});
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Segmentation Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>Otsu's Method</h6><p>Maximizes between-class variance: $\\sigma_B^2 = \\omega_0\\omega_1(\\mu_0-\\mu_1)^2$</p>
+    <h6>Watershed</h6><p>Treats image as topographic surface. Floods from local minima; watershed lines separate catchment basins.</p>
+    <h6>Region Growing</h6><p>Start from seed pixel, add neighbors if $|f(x,y) - f_{seed}| \\leq T$.</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

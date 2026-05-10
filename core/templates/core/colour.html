@@ -1,0 +1,124 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 15 — Colour Processing & ML{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">15</span>Colour Image Processing & ML Recognition</h2>
+    <p class="text-muted mb-0">Colour spaces, pseudo-colouring, segmentation, ResNet-18 + Grad-CAM.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-3">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Operations</h6>
+      <div class="d-grid gap-2">
+        <button class="btn btn-primary" onclick="doColour('colorspaces',{})">Colour Space Conversion</button>
+        <div>
+          <label class="form-label small">Colourmap</label>
+          <select class="form-select form-select-sm" id="colourmap">
+            <option value="2">JET</option><option value="11">HOT</option>
+            <option value="9">RAINBOW</option><option value="21">VIRIDIS</option>
+          </select>
+          <button class="btn btn-outline-primary w-100 mt-1" onclick="doColour('pseudo_colour',{colormap:document.getElementById('colourmap').value})">Pseudo-Colour</button>
+        </div>
+        <button class="btn btn-outline-primary" onclick="doColour('colour_histogram',{})">Colour Histogram</button>
+        <div>
+          <label class="form-label small d-flex justify-content-between">Hue Low <span class="badge bg-secondary" id="hLowVal">0</span></label>
+          <input type="range" class="form-range" id="hLow" min="0" max="179" value="0" oninput="document.getElementById('hLowVal').textContent=this.value">
+          <label class="form-label small d-flex justify-content-between">Hue High <span class="badge bg-secondary" id="hHighVal">30</span></label>
+          <input type="range" class="form-range" id="hHigh" min="0" max="179" value="30" oninput="document.getElementById('hHighVal').textContent=this.value">
+          <button class="btn btn-outline-secondary w-100 mt-1" onclick="doColour('colour_segment',{h_low:document.getElementById('hLow').value,h_high:document.getElementById('hHigh').value})">Colour Segmentation</button>
+        </div>
+        <button class="btn btn-warning" onclick="doColour('recognize',{})"><i class="bi bi-cpu me-1"></i>ResNet-18 Recognition</button>
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-9">
+    <div class="card border-0 mb-3"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Results</h6>
+      <div class="row g-3" id="resultArea"><div class="col-12 text-center text-muted py-4">Upload and select an operation</div></div>
+    </div></div>
+    <div class="card border-0 d-none" id="histCard"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-2">Colour Histogram</h6>
+      <canvas id="colourHistChart" height="200"></canvas>
+    </div></div>
+    <div class="card border-0 d-none mt-3" id="predCard"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Top-5 Predictions</h6>
+      <div id="predArea"></div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null, histChart = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+async function doColour(op, params) {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/colour/', { image: uploadedImage, operation: op, params });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('histCard').classList.add('d-none');
+  document.getElementById('predCard').classList.add('d-none');
+  if (op === 'colorspaces') {
+    document.getElementById('resultArea').innerHTML = [
+      ['Original', uploadedImage], ['Grayscale', r.gray], ['HSV', r.hsv], ['LAB', r.lab],
+      ['YCbCr', r.ycbcr], ['R Channel', r.r_channel], ['G Channel', r.g_channel], ['B Channel', r.b_channel],
+      ['H Channel', r.h_channel], ['S Channel', r.s_channel], ['V Channel', r.v_channel]
+    ].map(([l,s]) => `<div class="col-6 col-md-4 col-xl-3"><p class="small text-muted">${l}</p><img src="${s}" class="img-fluid rounded border"></div>`).join('');
+    document.getElementById('resultArea').className = 'row g-2';
+  } else if (op === 'colour_histogram') {
+    document.getElementById('resultArea').innerHTML = `<div class="col-12"><img src="${uploadedImage}" class="img-fluid rounded border" style="max-height:200px"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+    document.getElementById('histCard').classList.remove('d-none');
+    if (histChart) histChart.destroy();
+    histChart = new Chart(document.getElementById('colourHistChart'), {
+      type: 'line',
+      data: { labels: r.labels, datasets: [
+        { label: 'Red', data: r.r_hist, borderColor: '#ef4444', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: 'Green', data: r.g_hist, borderColor: '#22c55e', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: 'Blue', data: r.b_hist, borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, fill: false },
+      ]},
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+  } else if (op === 'recognize') {
+    document.getElementById('resultArea').innerHTML = `
+      <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+      <div class="col-6"><p class="small text-muted">Grad-CAM Overlay</p><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+    document.getElementById('predCard').classList.remove('d-none');
+    document.getElementById('predArea').innerHTML = r.predictions.map(p => `
+      <div class="mb-2">
+        <div class="d-flex justify-content-between mb-1"><span>${p.label}</span><strong>${p.confidence}%</strong></div>
+        <div class="progress" style="height:8px"><div class="progress-bar bg-primary" style="width:${p.confidence}%"></div></div>
+      </div>`).join('');
+  } else {
+    document.getElementById('resultArea').innerHTML = `
+      <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+      <div class="col-6"><p class="small text-muted">Result</p><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+  }
+}
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Colour Processing Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>RGB to HSV</h6><p>$V = \\max(R,G,B)$, $S = (V-\\min)/V$, $H$ encodes hue angle.</p>
+    <h6>RGB to LAB</h6><p>Perceptually uniform. $L^*$ = lightness, $a^*$ = green-red, $b^*$ = blue-yellow.</p>
+    <h6>ResNet-18</h6><p>18-layer residual network. Residual connection: $H(x) = F(x) + x$ avoids vanishing gradients.</p>
+    <h6>Grad-CAM</h6><p>$L^c_{Grad-CAM} = ReLU\\left(\\sum_k \\alpha_k^c A^k\\right)$ where $\\alpha_k^c = \\frac{1}{Z}\\sum_i\\sum_j \\frac{\\partial y^c}{\\partial A^k_{ij}}$</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

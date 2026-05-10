@@ -1,0 +1,142 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 4 — Bit Plane & Watermarking{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">4</span>Bit Plane Slicing & Watermarking</h2>
+    <p class="text-muted mb-0">Visualize bit planes, reconstruct from selected planes, embed/extract watermarks.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Bit Plane Controls</h6>
+      <button class="btn btn-primary w-100 mb-3" id="btnPlanes"><i class="bi bi-layers me-1"></i>Show All 8 Bit Planes</button>
+      <h6 class="fw-semibold mb-2">Reconstruct from Planes</h6>
+      <div class="mb-2">
+        {% for i in bit_planes %}
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" id="bit{{ i }}" value="{{ i }}" {% if i >= 5 %}checked{% endif %}>
+          <label class="form-check-label small">Bit {{ i }}</label>
+        </div>
+        {% endfor %}
+      </div>
+      <button class="btn btn-outline-primary w-100 mb-4" id="btnReconstruct">Reconstruct</button>
+      <h6 class="fw-semibold mb-3">LSB Watermarking</h6>
+      <input type="text" class="form-control mb-2" id="wmText" placeholder="Enter watermark text" value="DIP Lab Tool">
+      <button class="btn btn-warning w-100 mb-2" id="btnEmbedLSB"><i class="bi bi-lock me-1"></i>Embed LSB Watermark</button>
+      <button class="btn btn-outline-warning w-100 mb-3" id="btnExtractLSB"><i class="bi bi-unlock me-1"></i>Extract Watermark</button>
+      <h6 class="fw-semibold mb-2">Visible Watermark</h6>
+      <input type="text" class="form-control mb-2" id="visWmText" placeholder="Visible text" value="CONFIDENTIAL">
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Opacity <span class="badge bg-secondary" id="alphaVal">0.4</span></label>
+        <input type="range" class="form-range" id="wmAlpha" min="0.1" max="0.9" step="0.1" value="0.4" oninput="document.getElementById('alphaVal').textContent=parseFloat(this.value).toFixed(1)">
+      </div>
+      <button class="btn btn-outline-secondary w-100" id="btnVisWm">Add Visible Watermark</button>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Results</h6>
+      <div id="resultArea"><div class="text-center text-muted py-5">Upload an image and select an operation</div></div>
+      <div id="extractedText" class="mt-3 d-none">
+        <div class="alert alert-info"><strong>Extracted Watermark:</strong> <span id="wmExtracted"></span></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+
+document.getElementById('btnPlanes').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/bitplane/', { image: uploadedImage, operation: 'planes' });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  const labels = ['Bit 0 (LSB)','Bit 1','Bit 2','Bit 3','Bit 4','Bit 5','Bit 6','Bit 7 (MSB)'];
+  document.getElementById('resultArea').innerHTML = r.planes.map((p,i) =>
+    `<div class="col-6 col-md-3 mb-3"><p class="small text-muted">${labels[i]}</p><img src="${p}" class="img-fluid rounded border"></div>`
+  ).join('');
+  document.getElementById('resultArea').className = 'row g-2';
+});
+
+document.getElementById('btnReconstruct').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  const bits = [...document.querySelectorAll('[id^=bit]:checked')].map(c => parseInt(c.value));
+  showSpinner();
+  const r = await postAPI('/api/bitplane/', { image: uploadedImage, operation: 'reconstruct', params: { bits } });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="row g-3">
+      <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+      <div class="col-6"><p class="small text-muted">Reconstructed (bits: ${bits.join(',')})</p><img src="${r.result_image}" class="img-fluid rounded border"></div>
+    </div>`;
+});
+
+document.getElementById('btnEmbedLSB').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/bitplane/', { image: uploadedImage, operation: 'watermark_lsb', params: { text: document.getElementById('wmText').value } });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="row g-3">
+      <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+      <div class="col-6"><p class="small text-muted">Watermarked (LSB)</p><img src="${r.result_image}" class="img-fluid rounded border"></div>
+    </div>`;
+  document.getElementById('extractedText').classList.remove('d-none');
+  document.getElementById('wmExtracted').textContent = r.extracted_text;
+  uploadedImage = r.result_image;
+});
+
+document.getElementById('btnExtractLSB').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/bitplane/', { image: uploadedImage, operation: 'watermark_lsb', params: { text: '' } });
+  hideSpinner();
+  document.getElementById('extractedText').classList.remove('d-none');
+  document.getElementById('wmExtracted').textContent = r.extracted_text || '(none found)';
+});
+
+document.getElementById('btnVisWm').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/bitplane/', { image: uploadedImage, operation: 'watermark_visible',
+    params: { text: document.getElementById('visWmText').value, alpha: document.getElementById('wmAlpha').value } });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="row g-3">
+      <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+      <div class="col-6"><p class="small text-muted">Visible Watermark</p><img src="${r.result_image}" class="img-fluid rounded border"></div>
+    </div>`;
+});
+
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Bit Plane Slicing Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <p>An 8-bit pixel value $f$ can be decomposed: $f = \\sum_{k=0}^{7} b_k \\cdot 2^k$</p>
+    <p>Higher bit planes (6,7) carry most visual information. Lower planes (0,1,2) carry fine detail and noise.</p>
+    <h6>LSB Watermarking</h6>
+    <p>Embed data in bit 0 (LSB). Change is imperceptible: $\\Delta = 1$ out of 255.</p>
+    <p>Capacity: $W \\times H$ bits for a grayscale image.</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

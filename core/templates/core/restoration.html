@@ -1,0 +1,414 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 10 — Image Restoration{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">10</span>Image Restoration</h2>
+    <p class="text-muted mb-0">Add noise, then compare 7 denoising methods side-by-side with metrics.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory('restoration')">
+    <i class="bi bi-book me-1"></i>Theory
+  </button>
+</div>
+
+<div class="row g-4">
+  <!-- Upload -->
+  <div class="col-12">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-upload me-2 text-primary"></i>Upload Image</h6>
+        <div class="upload-zone" id="uploadZone">
+          <i class="bi bi-image fs-1 text-muted mb-2"></i>
+          <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+          <p class="text-muted small mb-0">PNG, JPG, BMP — max 20 MB</p>
+          <input type="file" id="imageInput" accept="image/*" class="d-none">
+        </div>
+        <div id="uploadPreview" class="mt-3 d-none">
+          <img id="previewImg" class="img-fluid rounded" style="max-height:200px">
+          <span class="badge bg-success ms-2" id="uploadedBadge">Uploaded</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="col-lg-4">
+    <div class="card border-0 h-100">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-sliders me-2 text-primary"></i>Noise Parameters</h6>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Noise Type</label>
+          <select class="form-select" id="noiseType">
+            <option value="gaussian">Gaussian Noise</option>
+            <option value="salt_pepper">Salt & Pepper</option>
+            <option value="speckle">Speckle Noise</option>
+            <option value="poisson">Poisson Noise</option>
+            <option value="periodic">Periodic Noise</option>
+          </select>
+        </div>
+
+        <div id="gaussianParams">
+          <div class="mb-3">
+            <label class="form-label d-flex justify-content-between">
+              Mean <span class="badge bg-secondary" id="meanVal">0</span>
+            </label>
+            <input type="range" class="form-range" id="noiseMean" min="-50" max="50" value="0"
+                   oninput="document.getElementById('meanVal').textContent=this.value">
+          </div>
+          <div class="mb-3">
+            <label class="form-label d-flex justify-content-between">
+              Sigma <span class="badge bg-secondary" id="sigmaVal">25</span>
+            </label>
+            <input type="range" class="form-range" id="noiseSigma" min="1" max="100" value="25"
+                   oninput="document.getElementById('sigmaVal').textContent=this.value">
+          </div>
+        </div>
+
+        <div id="spParams" class="d-none">
+          <div class="mb-3">
+            <label class="form-label d-flex justify-content-between">
+              Density <span class="badge bg-secondary" id="densityVal">0.05</span>
+            </label>
+            <input type="range" class="form-range" id="noiseDensity" min="0.01" max="0.3" step="0.01" value="0.05"
+                   oninput="document.getElementById('densityVal').textContent=parseFloat(this.value).toFixed(2)">
+          </div>
+        </div>
+
+        <div id="periodicParams" class="d-none">
+          <div class="mb-3">
+            <label class="form-label d-flex justify-content-between">
+              Frequency <span class="badge bg-secondary" id="freqVal">0.1</span>
+            </label>
+            <input type="range" class="form-range" id="noiseFreq" min="0.01" max="0.5" step="0.01" value="0.1"
+                   oninput="document.getElementById('freqVal').textContent=parseFloat(this.value).toFixed(2)">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Direction</label>
+            <select class="form-select" id="noiseDir">
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn btn-warning w-100 mb-2" id="btnAddNoise">
+          <i class="bi bi-lightning me-1"></i>Add Noise Only
+        </button>
+        <button class="btn btn-primary w-100" id="btnCompare">
+          <i class="bi bi-grid-3x3 me-1"></i>Compare All Methods
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Noisy vs Original -->
+  <div class="col-lg-8">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-eye me-2 text-primary"></i>Original vs Noisy</h6>
+        <div class="row g-3">
+          <div class="col-6">
+            <p class="text-muted small mb-1">Original</p>
+            <img id="origDisplay" class="img-fluid rounded border" src="" alt="Original"
+                 style="min-height:150px;background:#f8f9fa;width:100%">
+          </div>
+          <div class="col-6">
+            <p class="text-muted small mb-1">Noisy</p>
+            <img id="noisyDisplay" class="img-fluid rounded border" src="" alt="Noisy"
+                 style="min-height:150px;background:#f8f9fa;width:100%">
+          </div>
+        </div>
+        <div id="noiseMetrics" class="mt-3 d-none">
+          <div class="row g-2">
+            <div class="col-4"><div class="metric-badge">PSNR: <strong id="nPSNR">—</strong> dB</div></div>
+            <div class="col-4"><div class="metric-badge">MSE: <strong id="nMSE">—</strong></div></div>
+            <div class="col-4"><div class="metric-badge">SSIM: <strong id="nSSIM">—</strong></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comparison Grid -->
+  <div class="col-12" id="comparisonSection" style="display:none">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-grid me-2 text-primary"></i>Denoising Methods Comparison</h6>
+        <div class="row g-3" id="methodGrid">
+          {% for method in restoration_methods %}
+          <div class="col-md-6 col-xl-3">
+            <div class="card border method-result-card" id="card_{{ method }}">
+              <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span class="fw-semibold text-capitalize small">{{ method }}</span>
+                <span class="badge bg-secondary" id="badge_{{ method }}"></span>
+              </div>
+              <div class="card-body p-2">
+                <img id="img_{{ method }}" class="img-fluid rounded" src="" alt="{{ method }}"
+                     style="min-height:100px;background:#f8f9fa;width:100%">
+                <div class="mt-2 small">
+                  <div class="d-flex justify-content-between">
+                    <span class="text-muted">PSNR</span>
+                    <strong id="psnr_{{ method }}">—</strong>
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <span class="text-muted">SSIM</span>
+                    <strong id="ssim_{{ method }}">—</strong>
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <span class="text-muted">Time</span>
+                    <strong id="time_{{ method }}">—</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="col-lg-6" id="chartSection" style="display:none">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-bar-chart me-2 text-primary"></i>PSNR Comparison</h6>
+        <canvas id="psnrChart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6" id="timeChartSection" style="display:none">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-clock me-2 text-primary"></i>Processing Time (ms)</h6>
+        <canvas id="timeChart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Adaptive Filters -->
+  <div class="col-12">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-sliders2 me-2 text-primary"></i>Adaptive Filters</h6>
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label d-flex justify-content-between">
+              Kernel Size <span class="badge bg-secondary" id="adaptKsizeVal">7</span>
+            </label>
+            <input type="range" class="form-range" id="adaptKsize" min="3" max="15" step="2" value="7"
+                   oninput="document.getElementById('adaptKsizeVal').textContent=this.value">
+          </div>
+          <div class="col-md-4">
+            <button class="btn btn-outline-primary w-100" id="btnAdaptMean">
+              <i class="bi bi-funnel me-1"></i>Adaptive Mean Filter
+            </button>
+          </div>
+          <div class="col-md-4" id="adaptResult" style="display:none">
+            <img id="adaptImg" class="img-fluid rounded border" style="max-height:150px">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+let psnrChartInst = null;
+let timeChartInst = null;
+
+// Upload zone
+const uploadZone = document.getElementById('uploadZone');
+const imageInput = document.getElementById('imageInput');
+uploadZone.addEventListener('click', () => imageInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+imageInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadedImage = e.target.result;
+    document.getElementById('previewImg').src = uploadedImage;
+    document.getElementById('uploadPreview').classList.remove('d-none');
+    document.getElementById('origDisplay').src = uploadedImage;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Noise type toggle
+document.getElementById('noiseType').addEventListener('change', function() {
+  document.getElementById('gaussianParams').classList.add('d-none');
+  document.getElementById('spParams').classList.add('d-none');
+  document.getElementById('periodicParams').classList.add('d-none');
+  if (this.value === 'gaussian') document.getElementById('gaussianParams').classList.remove('d-none');
+  else if (this.value === 'salt_pepper') document.getElementById('spParams').classList.remove('d-none');
+  else if (this.value === 'periodic') document.getElementById('periodicParams').classList.remove('d-none');
+});
+
+function getNoiseParams() {
+  const type = document.getElementById('noiseType').value;
+  const p = { noise_type: type };
+  if (type === 'gaussian') {
+    p.mean = parseFloat(document.getElementById('noiseMean').value);
+    p.sigma = parseFloat(document.getElementById('noiseSigma').value);
+  } else if (type === 'salt_pepper') {
+    p.density = parseFloat(document.getElementById('noiseDensity').value);
+  } else if (type === 'periodic') {
+    p.freq = parseFloat(document.getElementById('noiseFreq').value);
+    p.direction = document.getElementById('noiseDir').value;
+  }
+  return p;
+}
+
+document.getElementById('btnAddNoise').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Please upload an image first.'); return; }
+  showSpinner();
+  const resp = await postAPI('/api/restoration/', {
+    image: uploadedImage,
+    operation: 'add_noise',
+    params: getNoiseParams()
+  });
+  hideSpinner();
+  if (resp.error) { alert(resp.error); return; }
+  document.getElementById('noisyDisplay').src = resp.result_image;
+  document.getElementById('noiseMetrics').classList.remove('d-none');
+  document.getElementById('nPSNR').textContent = resp.metrics.psnr + ' dB';
+  document.getElementById('nMSE').textContent = resp.metrics.mse;
+  document.getElementById('nSSIM').textContent = resp.metrics.ssim;
+});
+
+document.getElementById('btnCompare').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Please upload an image first.'); return; }
+  showSpinner();
+  const resp = await postAPI('/api/restoration/', {
+    image: uploadedImage,
+    operation: 'compare',
+    params: getNoiseParams()
+  });
+  hideSpinner();
+  if (resp.error) { alert(resp.error); return; }
+
+  document.getElementById('noisyDisplay').src = resp.noisy_image;
+  document.getElementById('comparisonSection').style.display = '';
+  document.getElementById('chartSection').style.display = '';
+  document.getElementById('timeChartSection').style.display = '';
+
+  const methods = ['mean','gaussian','median','bilateral','wiener','nlm','dncnn'];
+  methods.forEach(m => {
+    if (resp[m]) document.getElementById('img_' + m).src = resp[m];
+    const met = resp[m + '_metrics'];
+    if (met) {
+      document.getElementById('psnr_' + m).textContent = met.psnr + ' dB';
+      document.getElementById('ssim_' + m).textContent = met.ssim;
+      document.getElementById('time_' + m).textContent = resp[m + '_time'] + ' ms';
+    }
+    const card = document.getElementById('card_' + m);
+    card.classList.remove('border-success');
+    document.getElementById('badge_' + m).textContent = '';
+    document.getElementById('badge_' + m).className = 'badge bg-secondary';
+  });
+
+  if (resp.best_method) {
+    const bc = document.getElementById('card_' + resp.best_method);
+    if (bc) {
+      bc.classList.add('border-success');
+      const bb = document.getElementById('badge_' + resp.best_method);
+      bb.textContent = '★ Best';
+      bb.className = 'badge bg-success';
+    }
+  }
+
+  // PSNR chart
+  const psnrData = resp.psnr_chart;
+  if (psnrChartInst) psnrChartInst.destroy();
+  psnrChartInst = new Chart(document.getElementById('psnrChart'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(psnrData).map(k => k.toUpperCase()),
+      datasets: [{
+        label: 'PSNR (dB)',
+        data: Object.values(psnrData),
+        backgroundColor: Object.keys(psnrData).map(k =>
+          k === resp.best_method ? '#22c55e' : '#4f6ef7'),
+        borderRadius: 6,
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } },
+               scales: { y: { beginAtZero: false } } }
+  });
+
+  // Time chart
+  const timeData = resp.time_chart;
+  if (timeChartInst) timeChartInst.destroy();
+  timeChartInst = new Chart(document.getElementById('timeChart'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(timeData).map(k => k.toUpperCase()),
+      datasets: [{
+        label: 'Time (ms)',
+        data: Object.values(timeData),
+        backgroundColor: '#f59e0b',
+        borderRadius: 6,
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+});
+
+document.getElementById('btnAdaptMean').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Please upload an image first.'); return; }
+  showSpinner();
+  const resp = await postAPI('/api/restoration/', {
+    image: uploadedImage,
+    operation: 'adaptive_mean',
+    params: {
+      noise_type: document.getElementById('noiseType').value,
+      ksize: parseInt(document.getElementById('adaptKsize').value),
+      ...getNoiseParams()
+    }
+  });
+  hideSpinner();
+  if (resp.error) { alert(resp.error); return; }
+  document.getElementById('adaptResult').style.display = '';
+  document.getElementById('adaptImg').src = resp.result_image;
+});
+
+function showTheory(module) {
+  const theories = {
+    restoration: {
+      title: 'Image Restoration Theory',
+      body: `
+        <h6>Noise Models</h6>
+        <p><strong>Gaussian:</strong> $f(x) = \\frac{1}{\\sigma\\sqrt{2\\pi}} e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}$</p>
+        <p><strong>Salt & Pepper:</strong> Random pixels set to 0 or 255 with probability $p$.</p>
+        <p><strong>Speckle:</strong> $g = f + f \\cdot n$ where $n$ is uniform noise.</p>
+        <h6 class="mt-3">Wiener Filter</h6>
+        <p>$\\hat{F}(u,v) = \\left[\\frac{H^*(u,v)}{|H(u,v)|^2 + S_n/S_f}\\right] G(u,v)$</p>
+        <h6 class="mt-3">Non-Local Means</h6>
+        <p>$NL[u](x) = \\frac{1}{C(x)} \\int e^{-\\frac{\\|u(x+\\cdot)-u(y+\\cdot)\\|^2}{h^2}} u(y)\\,dy$</p>
+        <h6 class="mt-3">DnCNN (Residual Learning)</h6>
+        <p>Learns residual noise: $\\hat{n} = R(y)$, then $\\hat{x} = y - \\hat{n}$</p>
+        <h6 class="mt-3">Quality Metrics</h6>
+        <p><strong>PSNR:</strong> $10 \\log_{10}\\frac{255^2}{MSE}$ dB</p>
+        <p><strong>SSIM:</strong> $\\frac{(2\\mu_x\\mu_y+c_1)(2\\sigma_{xy}+c_2)}{(\\mu_x^2+\\mu_y^2+c_1)(\\sigma_x^2+\\sigma_y^2+c_2)}$</p>
+      `
+    }
+  };
+  const t = theories[module] || { title: 'Theory', body: 'No theory available.' };
+  document.getElementById('theoryModalTitle').textContent = t.title;
+  document.getElementById('theoryModalBody').innerHTML = t.body;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

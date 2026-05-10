@@ -1,0 +1,142 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 14 — Image Compression{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">14</span>Image Compression</h2>
+    <p class="text-muted mb-0">JPEG quality, DCT blocks, RLE, Huffman coding, format comparison.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">JPEG Compression</h6>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Quality <span class="badge bg-secondary" id="qualVal">75</span></label>
+        <input type="range" class="form-range" id="quality" min="1" max="100" value="75" oninput="document.getElementById('qualVal').textContent=this.value">
+      </div>
+      <button class="btn btn-primary w-100 mb-2" onclick="doComp('jpeg',{quality:document.getElementById('quality').value})">Compress JPEG</button>
+      <button class="btn btn-outline-primary w-100 mb-4" onclick="doComp('psnr_curve',{})">PSNR vs Quality Curve</button>
+      <h6 class="fw-semibold mb-3">Other Tools</h6>
+      <div class="d-grid gap-2">
+        <button class="btn btn-outline-secondary" onclick="doComp('dct',{})">DCT Block Visualization</button>
+        <button class="btn btn-outline-secondary" onclick="doComp('rle',{})">Run-Length Encoding</button>
+        <button class="btn btn-outline-secondary" onclick="doComp('huffman',{})">Huffman Coding Demo</button>
+        <button class="btn btn-outline-secondary" onclick="doComp('format_compare',{})">Format Comparison</button>
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0 mb-3"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Result</h6>
+      <div class="row g-3" id="resultArea"><div class="col-12 text-center text-muted py-4">Upload and select an operation</div></div>
+      <div id="statsArea" class="mt-3"></div>
+    </div></div>
+    <div class="card border-0 d-none" id="chartCard"><div class="card-body p-4">
+      <canvas id="compChart" height="200"></canvas>
+    </div></div>
+    <div class="card border-0 d-none mt-3" id="tableCard"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Data Table</h6>
+      <div id="tableArea" class="table-responsive"></div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null, compChart = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+async function doComp(op, params) {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/compression/', { image: uploadedImage, operation: op, params });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('chartCard').classList.add('d-none');
+  document.getElementById('tableCard').classList.add('d-none');
+  document.getElementById('statsArea').innerHTML = '';
+  if (op === 'jpeg') {
+    document.getElementById('resultArea').innerHTML = `
+      <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+      <div class="col-6"><p class="small text-muted">Compressed (Q=${params.quality})</p><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+    document.getElementById('statsArea').innerHTML = `
+      <div class="row g-2">
+        <div class="col-3"><div class="metric-badge">PSNR: <strong>${r.psnr} dB</strong></div></div>
+        <div class="col-3"><div class="metric-badge">Ratio: <strong>${r.compression_ratio}:1</strong></div></div>
+        <div class="col-3"><div class="metric-badge">Reduction: <strong>${r.size_reduction_pct}%</strong></div></div>
+        <div class="col-3"><div class="metric-badge">Size: <strong>${r.compressed_size_kb} KB</strong></div></div>
+      </div>`;
+  } else if (op === 'psnr_curve') {
+    document.getElementById('resultArea').innerHTML = `<div class="col-12"><img src="${uploadedImage}" class="img-fluid rounded border" style="max-height:200px"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+    document.getElementById('chartCard').classList.remove('d-none');
+    if (compChart) compChart.destroy();
+    compChart = new Chart(document.getElementById('compChart'), {
+      type: 'line',
+      data: { labels: r.curve.qualities, datasets: [{ label: 'PSNR (dB)', data: r.curve.psnr, borderColor: '#4f6ef7', backgroundColor: 'rgba(79,110,247,0.1)', fill: true, tension: 0.3 }] },
+      options: { responsive: true, plugins: { title: { display: true, text: 'PSNR vs JPEG Quality' } } }
+    });
+  } else if (op === 'dct') {
+    document.getElementById('resultArea').innerHTML = `
+      <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+      <div class="col-6"><p class="small text-muted">DCT Blocks (8×8)</p><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+  } else if (op === 'rle') {
+    document.getElementById('resultArea').innerHTML = `<div class="col-12"><img src="${uploadedImage}" class="img-fluid rounded border" style="max-height:200px"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+    document.getElementById('statsArea').innerHTML = `
+      <div class="row g-2">
+        <div class="col-4"><div class="metric-badge">Pairs: <strong>${r.rle.total_pairs}</strong></div></div>
+        <div class="col-4"><div class="metric-badge">Ratio: <strong>${r.rle.compression_ratio}:1</strong></div></div>
+        <div class="col-4"><div class="metric-badge">Orig bits: <strong>${r.rle.original_bits}</strong></div></div>
+      </div>`;
+    document.getElementById('tableCard').classList.remove('d-none');
+    document.getElementById('tableArea').innerHTML = `<table class="table table-sm table-bordered"><thead><tr><th>Value</th><th>Count</th></tr></thead><tbody>
+      ${r.rle.pairs.map(([v,c]) => `<tr><td>${v}</td><td>${c}</td></tr>`).join('')}</tbody></table>`;
+  } else if (op === 'huffman') {
+    document.getElementById('resultArea').innerHTML = `<div class="col-12"><img src="${uploadedImage}" class="img-fluid rounded border" style="max-height:200px"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+    document.getElementById('statsArea').innerHTML = `
+      <div class="row g-2">
+        <div class="col-4"><div class="metric-badge">Avg Code Len: <strong>${r.huffman.avg_code_length}</strong></div></div>
+        <div class="col-4"><div class="metric-badge">Entropy: <strong>${r.huffman.entropy}</strong></div></div>
+        <div class="col-4"><div class="metric-badge">Symbols: <strong>${r.huffman.unique_symbols}</strong></div></div>
+      </div>`;
+    document.getElementById('tableCard').classList.remove('d-none');
+    document.getElementById('tableArea').innerHTML = `<table class="table table-sm table-bordered"><thead><tr><th>Symbol</th><th>Freq</th><th>Prob</th><th>Code</th><th>Length</th></tr></thead><tbody>
+      ${r.huffman.table.map(row => `<tr><td>${row.symbol}</td><td>${row.frequency}</td><td>${row.probability}</td><td><code>${row.code}</code></td><td>${row.code_length}</td></tr>`).join('')}</tbody></table>`;
+  } else if (op === 'format_compare') {
+    document.getElementById('resultArea').innerHTML = `<div class="col-12"><img src="${uploadedImage}" class="img-fluid rounded border" style="max-height:200px"></div>`;
+    document.getElementById('resultArea').className = 'row g-3';
+    document.getElementById('chartCard').classList.remove('d-none');
+    if (compChart) compChart.destroy();
+    compChart = new Chart(document.getElementById('compChart'), {
+      type: 'bar',
+      data: { labels: Object.keys(r.sizes).map(k => k.toUpperCase()),
+        datasets: [{ label: 'File Size (KB)', data: Object.values(r.sizes), backgroundColor: ['#4f6ef7','#22c55e','#f59e0b'], borderRadius: 6 }] },
+      options: { responsive: true, plugins: { title: { display: true, text: 'Format File Size Comparison' }, legend: { display: false } } }
+    });
+  }
+}
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Image Compression Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>DCT (Discrete Cosine Transform)</h6><p>$F(u,v) = \\frac{2}{N}C(u)C(v)\\sum_{x=0}^{N-1}\\sum_{y=0}^{N-1}f(x,y)\\cos\\frac{(2x+1)u\\pi}{2N}\\cos\\frac{(2y+1)v\\pi}{2N}$</p>
+    <h6>JPEG Steps</h6><ol><li>Color space conversion (RGB→YCbCr)</li><li>8×8 block DCT</li><li>Quantization</li><li>Zigzag scan</li><li>RLE + Huffman coding</li></ol>
+    <h6>Huffman Coding</h6><p>Assigns shorter codes to more frequent symbols. Average code length approaches entropy $H = -\\sum p_i \\log_2 p_i$.</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}DIP Lab Tool{% endblock %}</title>
+  {% load static %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="{% static 'core/css/style.css' %}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    MathJax = { tex: { inlineMath: [['$','$'],['\\(','\\)']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark navbar-top px-3 py-2 d-flex align-items-center">
+  <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'home' %}">
+    <i class="bi bi-cpu-fill fs-4 text-accent"></i>
+    <span class="fw-bold">DIP Lab Tool</span>
+  </a>
+  <button class="btn btn-sm btn-outline-light d-md-none ms-auto" id="sidebarToggle">
+    <i class="bi bi-list"></i>
+  </button>
+  <div class="ms-auto d-none d-md-flex align-items-center gap-3">
+    <span class="text-muted small">University-Level Digital Image Processing</span>
+  </div>
+</nav>
+
+<div class="d-flex" style="min-height:calc(100vh - 56px)">
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header px-3 py-2">
+      <small class="text-uppercase text-muted fw-semibold letter-spacing">Course Modules</small>
+    </div>
+    <ul class="nav flex-column px-2">
+      {% with request.resolver_match.url_name as url_name %}
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'home' %}active{% endif %}" href="{% url 'home' %}">
+          <i class="bi bi-house-fill me-2"></i>Overview
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'intro' %}active{% endif %}" href="{% url 'intro' %}">
+          <i class="bi bi-1-circle me-2"></i>1. Introduction & Spectrum
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'sampling' %}active{% endif %}" href="{% url 'sampling' %}">
+          <i class="bi bi-2-circle me-2"></i>2. Sampling & Quantization
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'enhancement' %}active{% endif %}" href="{% url 'enhancement' %}">
+          <i class="bi bi-3-circle me-2"></i>3. Enhancement & Point Ops
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'bitplane' %}active{% endif %}" href="{% url 'bitplane' %}">
+          <i class="bi bi-4-circle me-2"></i>4. Bit Plane & Watermarking
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'histogram' %}active{% endif %}" href="{% url 'histogram' %}">
+          <i class="bi bi-5-circle me-2"></i>5. Histogram Processing
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'spatial' %}active{% endif %}" href="{% url 'spatial' %}">
+          <i class="bi bi-6-circle me-2"></i>6. Spatial Filtering
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'sharpening' %}active{% endif %}" href="{% url 'sharpening' %}">
+          <i class="bi bi-7-circle me-2"></i>7. Sharpening & Edges
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'frequency' %}active{% endif %}" href="{% url 'frequency' %}">
+          <i class="bi bi-8-circle me-2"></i>8/9. Frequency Domain
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'restoration' %}active{% endif %}" href="{% url 'restoration' %}">
+          <i class="bi bi-9-circle me-2"></i>10. Image Restoration
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'segmentation_edges' %}active{% endif %}" href="{% url 'segmentation_edges' %}">
+          <i class="bi bi-circle me-2"></i>11. Segmentation: Edges
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'segmentation_region' %}active{% endif %}" href="{% url 'segmentation_region' %}">
+          <i class="bi bi-circle me-2"></i>12. Segmentation: Region
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'morphology' %}active{% endif %}" href="{% url 'morphology' %}">
+          <i class="bi bi-circle me-2"></i>13. Morphological Ops
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'compression' %}active{% endif %}" href="{% url 'compression' %}">
+          <i class="bi bi-circle me-2"></i>14. Image Compression
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'colour' %}active{% endif %}" href="{% url 'colour' %}">
+          <i class="bi bi-circle me-2"></i>15. Colour Processing & ML
+        </a>
+      </li>
+      {% endwith %}
+    </ul>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main-content flex-grow-1 p-4">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<!-- Global spinner overlay -->
+<div id="globalSpinner" class="spinner-overlay d-none">
+  <div class="text-center text-white">
+    <div class="spinner-border text-accent mb-3" style="width:3rem;height:3rem"></div>
+    <div class="fw-semibold">Processing…</div>
+  </div>
+</div>
+
+<!-- Theory Modal -->
+<div class="modal fade" id="theoryModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="theoryModalTitle">Theory</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="theoryModalBody"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{% static 'core/js/main.js' %}"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,130 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 7 — Sharpening & Edge Detection{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">7</span>Sharpening & Edge Detection</h2>
+    <p class="text-muted mb-0">All edge detectors compared side-by-side with metrics and charts.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-3">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Sharpening</h6>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Laplacian α <span class="badge bg-secondary" id="alphaVal">1.0</span></label>
+        <input type="range" class="form-range" id="alpha" min="0.1" max="3" step="0.1" value="1.0" oninput="document.getElementById('alphaVal').textContent=parseFloat(this.value).toFixed(1)">
+        <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="doSharp('laplacian_sharp',{alpha:document.getElementById('alpha').value})">Laplacian Sharpen</button>
+      </div>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Unsharp Radius <span class="badge bg-secondary" id="uradVal">5</span></label>
+        <input type="range" class="form-range" id="urad" min="1" max="21" step="2" value="5" oninput="document.getElementById('uradVal').textContent=this.value">
+        <label class="form-label d-flex justify-content-between">Amount <span class="badge bg-secondary" id="uamtVal">1.5</span></label>
+        <input type="range" class="form-range" id="uamt" min="0.1" max="5" step="0.1" value="1.5" oninput="document.getElementById('uamtVal').textContent=parseFloat(this.value).toFixed(1)">
+        <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="doSharp('unsharp',{radius:document.getElementById('urad').value,amount:document.getElementById('uamt').value})">Unsharp Mask</button>
+      </div>
+      <div class="mb-3">
+        <label class="form-label d-flex justify-content-between">High-Boost Factor <span class="badge bg-secondary" id="boostVal">1.5</span></label>
+        <input type="range" class="form-range" id="boost" min="1" max="5" step="0.1" value="1.5" oninput="document.getElementById('boostVal').textContent=parseFloat(this.value).toFixed(1)">
+        <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="doSharp('high_boost',{boost:document.getElementById('boost').value})">High-Boost Filter</button>
+      </div>
+      <hr>
+      <h6 class="fw-semibold mb-3">Edge Detection</h6>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Canny Low <span class="badge bg-secondary" id="canLowVal">50</span></label>
+        <input type="range" class="form-range" id="canLow" min="1" max="200" value="50" oninput="document.getElementById('canLowVal').textContent=this.value">
+        <label class="form-label d-flex justify-content-between">Canny High <span class="badge bg-secondary" id="canHighVal">150</span></label>
+        <input type="range" class="form-range" id="canHigh" min="1" max="400" value="150" oninput="document.getElementById('canHighVal').textContent=this.value">
+      </div>
+      <button class="btn btn-primary w-100" id="btnAllEdges"><i class="bi bi-grid me-1"></i>Run All Edge Detectors</button>
+    </div></div>
+  </div>
+  <div class="col-lg-9">
+    <div class="card border-0 mb-3"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Result</h6>
+      <div class="row g-2" id="resultArea"><div class="col-12 text-center text-muted py-4">Upload and run edge detection</div></div>
+    </div></div>
+    <div class="row g-3 d-none" id="chartsRow">
+      <div class="col-md-6"><div class="card border-0"><div class="card-body p-3">
+        <h6 class="fw-semibold mb-2 small">Edge Pixel Count</h6>
+        <canvas id="edgeCountChart" height="200"></canvas>
+      </div></div></div>
+      <div class="col-md-6"><div class="card border-0"><div class="card-body p-3">
+        <h6 class="fw-semibold mb-2 small">Processing Time (ms)</h6>
+        <canvas id="timeChart" height="200"></canvas>
+      </div></div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null, edgeChart = null, timeChart = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+
+async function doSharp(op, params) {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/sharpening/', { image: uploadedImage, operation: op, params });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="col-6"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6"><p class="small text-muted">Result</p><img src="${r.result_image}" class="img-fluid rounded border"></div>`;
+  document.getElementById('resultArea').className = 'row g-3';
+}
+
+document.getElementById('btnAllEdges').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/sharpening/', { image: uploadedImage, operation: 'all_edges',
+    params: { canny_low: document.getElementById('canLow').value, canny_high: document.getElementById('canHigh').value } });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  const imgs = [
+    ['Original', uploadedImage], ['Sobel X', r.sobel_x], ['Sobel Y', r.sobel_y],
+    ['Sobel', r.sobel], ['Prewitt X', r.prewitt_x], ['Prewitt Y', r.prewitt_y],
+    ['Prewitt', r.prewitt], ['Roberts', r.roberts], ['Laplacian', r.laplacian],
+    ['LoG', r.log], ['Canny', r.canny]
+  ];
+  document.getElementById('resultArea').innerHTML = imgs.map(([label, src]) =>
+    `<div class="col-6 col-md-4 col-xl-3"><p class="small text-muted">${label}</p><img src="${src}" class="img-fluid rounded border"></div>`
+  ).join('');
+  document.getElementById('resultArea').className = 'row g-2';
+  document.getElementById('chartsRow').classList.remove('d-none');
+  const ec = r.edge_counts, tc = r.times;
+  const labels = Object.keys(ec).map(k => k.charAt(0).toUpperCase()+k.slice(1));
+  if (edgeChart) edgeChart.destroy();
+  edgeChart = new Chart(document.getElementById('edgeCountChart'), {
+    type: 'bar', data: { labels, datasets: [{ label: 'Edge Pixels', data: Object.values(ec), backgroundColor: '#4f6ef7', borderRadius: 4 }] },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+  if (timeChart) timeChart.destroy();
+  timeChart = new Chart(document.getElementById('timeChart'), {
+    type: 'bar', data: { labels: Object.keys(tc).map(k => k.charAt(0).toUpperCase()+k.slice(1)),
+      datasets: [{ label: 'Time (ms)', data: Object.values(tc), backgroundColor: '#f59e0b', borderRadius: 4 }] },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+});
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Sharpening & Edge Detection Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>Laplacian Sharpening</h6><p>$g = f - \\alpha \\nabla^2 f$ where $\\nabla^2 f = \\frac{\\partial^2 f}{\\partial x^2} + \\frac{\\partial^2 f}{\\partial y^2}$</p>
+    <h6>Sobel Operator</h6><p>$G_x = \\begin{bmatrix}-1&0&1\\\\-2&0&2\\\\-1&0&1\\end{bmatrix}$, $G = \\sqrt{G_x^2+G_y^2}$</p>
+    <h6>Canny Edge Detector</h6><ol><li>Gaussian smoothing</li><li>Gradient magnitude & direction</li><li>Non-maximum suppression</li><li>Double thresholding & hysteresis</li></ol>
+    <h6>LoG (Marr-Hildreth)</h6><p>$\\nabla^2 G(x,y) = -\\frac{1}{\\pi\\sigma^4}\\left(1-\\frac{x^2+y^2}{2\\sigma^2}\\right)e^{-\\frac{x^2+y^2}{2\\sigma^2}}$</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

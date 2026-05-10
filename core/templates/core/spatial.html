@@ -1,0 +1,131 @@
+{% extends 'core/base.html' %}
+{% block title %}Module 6 — Spatial Filtering{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1"><span class="badge bg-primary me-2">6</span>Spatial Filtering & Smoothing</h2>
+    <p class="text-muted mb-0">Correlation vs convolution, smoothing filter comparison, boundary handling.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()"><i class="bi bi-book me-1"></i>Theory</button>
+</div>
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card border-0"><div class="card-body p-4">
+      <div class="upload-zone" id="uploadZone"><i class="bi bi-image fs-1 text-muted mb-2"></i>
+        <p class="mb-1 fw-semibold">Drag & drop or click to upload</p>
+        <input type="file" id="imageInput" accept="image/*" class="d-none">
+      </div>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Custom 3×3 Kernel</h6>
+      <div class="kernel-grid mb-3" id="kernelGrid">
+        {% for val in kernel_vals %}
+        <input type="number" class="form-control form-control-sm text-center kernel-cell" value="{{ val }}" step="0.1">
+        {% endfor %}
+      </div>
+      <div class="mb-2">
+        <label class="form-label">Mode</label>
+        <select class="form-select form-select-sm" id="kernelMode">
+          <option value="convolution">Convolution</option>
+          <option value="correlation">Correlation</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Boundary</label>
+        <select class="form-select form-select-sm" id="boundary">
+          <option value="reflect">Reflect</option>
+          <option value="replicate">Replicate</option>
+          <option value="zero">Zero Pad</option>
+          <option value="wrap">Wrap</option>
+        </select>
+      </div>
+      <button class="btn btn-primary w-100 mb-3" id="btnKernel">Apply Custom Kernel</button>
+      <hr>
+      <h6 class="fw-semibold mb-3">Compare All Smoothing Filters</h6>
+      <div class="mb-2">
+        <label class="form-label d-flex justify-content-between">Kernel Size <span class="badge bg-secondary" id="ksizeVal">5</span></label>
+        <input type="range" class="form-range" id="ksize" min="3" max="15" step="2" value="5" oninput="document.getElementById('ksizeVal').textContent=this.value">
+      </div>
+      <div class="mb-3">
+        <label class="form-label d-flex justify-content-between">Sigma <span class="badge bg-secondary" id="sigmaVal">1.0</span></label>
+        <input type="range" class="form-range" id="sigma" min="0.1" max="5" step="0.1" value="1.0" oninput="document.getElementById('sigmaVal').textContent=parseFloat(this.value).toFixed(1)">
+      </div>
+      <button class="btn btn-outline-primary w-100" id="btnCompare">Compare All Filters</button>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0 mb-3"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">Results</h6>
+      <div class="row g-3" id="resultArea"><div class="col-12 text-center text-muted py-4">Upload and apply a filter</div></div>
+    </div></div>
+    <div class="card border-0 d-none" id="chartCard"><div class="card-body p-4">
+      <h6 class="fw-semibold mb-3">PSNR Comparison</h6>
+      <canvas id="psnrChart" height="200"></canvas>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null, psnrChart = null;
+setupUpload('uploadZone','imageInput', img => { uploadedImage = img; });
+
+document.getElementById('btnKernel').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  const cells = document.querySelectorAll('.kernel-cell');
+  const kernel = [...cells].map(c => parseFloat(c.value) || 0);
+  showSpinner();
+  const r = await postAPI('/api/spatial/', { image: uploadedImage, operation: 'custom_kernel',
+    params: { kernel, mode: document.getElementById('kernelMode').value, border: document.getElementById('boundary').value } });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('resultArea').innerHTML = `
+    <div class="col-6 col-md-3"><p class="small text-muted">Original</p><img src="${uploadedImage}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Correlation</p><img src="${r.correlation}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Convolution</p><img src="${r.convolution}" class="img-fluid rounded border"></div>
+    <div class="col-6 col-md-3"><p class="small text-muted">Difference</p><img src="${r.difference}" class="img-fluid rounded border"></div>`;
+  document.getElementById('resultArea').className = 'row g-3';
+});
+
+document.getElementById('btnCompare').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Upload an image first'); return; }
+  showSpinner();
+  const r = await postAPI('/api/spatial/', { image: uploadedImage, operation: 'compare',
+    params: { ksize: document.getElementById('ksize').value, sigma: document.getElementById('sigma').value,
+              border: document.getElementById('boundary').value } });
+  hideSpinner();
+  if (r.error) { alert(r.error); return; }
+  const methods = ['mean','gaussian','median','bilateral'];
+  document.getElementById('resultArea').innerHTML = methods.map(m => `
+    <div class="col-6 col-md-3">
+      <p class="small text-muted text-capitalize">${m}</p>
+      <img src="${r[m]}" class="img-fluid rounded border">
+      <div class="small mt-1">PSNR: <strong>${r[m+'_metrics'].psnr} dB</strong></div>
+    </div>`).join('');
+  document.getElementById('resultArea').className = 'row g-3';
+  document.getElementById('chartCard').classList.remove('d-none');
+  if (psnrChart) psnrChart.destroy();
+  psnrChart = new Chart(document.getElementById('psnrChart'), {
+    type: 'bar',
+    data: {
+      labels: methods.map(m => m.charAt(0).toUpperCase()+m.slice(1)),
+      datasets: [{ label: 'PSNR (dB)', data: methods.map(m => r.psnr_chart[m]), backgroundColor: '#4f6ef7', borderRadius: 6 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+});
+function showTheory() {
+  document.getElementById('theoryModalTitle').textContent = 'Spatial Filtering Theory';
+  document.getElementById('theoryModalBody').innerHTML = `
+    <h6>Correlation</h6><p>$(f \\star h)(x,y) = \\sum_s\\sum_t h(s,t)f(x+s,y+t)$</p>
+    <h6>Convolution</h6><p>$(f * h)(x,y) = \\sum_s\\sum_t h(s,t)f(x-s,y-t)$ — kernel is flipped 180°</p>
+    <h6>Bilateral Filter</h6><p>$BF[I]_p = \\frac{1}{W_p}\\sum_q G_\\sigma(\\|p-q\\|)G_\\sigma(|I_p-I_q|)I_q$</p>
+    <p>Preserves edges by weighting by both spatial distance and intensity difference.</p>`;
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

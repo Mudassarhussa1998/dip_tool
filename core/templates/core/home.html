@@ -1,0 +1,32 @@
+{% extends 'core/base.html' %}
+{% block title %}DIP Lab Tool — Home{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="hero-card card border-0 p-5 text-center mb-2">
+      <h1 class="display-5 fw-bold mb-2">Digital Image Processing Lab</h1>
+      <p class="lead text-muted mb-4">An interactive, university-level DIP course tool covering 15 modules — from fundamentals to ML-based recognition.</p>
+      <div class="d-flex justify-content-center gap-3 flex-wrap">
+        <a href="{% url 'intro' %}" class="btn btn-primary btn-lg px-4">Start Module 1</a>
+        <a href="{% url 'restoration' %}" class="btn btn-outline-secondary btn-lg px-4">Jump to Restoration</a>
+      </div>
+    </div>
+  </div>
+
+  {% for mod in modules %}
+  <div class="col-md-6 col-xl-4">
+    <a href="{{ mod.url }}" class="text-decoration-none">
+      <div class="card module-card h-100 border-0">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="module-icon">{{ mod.num }}</div>
+            <h6 class="mb-0 fw-semibold">{{ mod.title }}</h6>
+          </div>
+          <p class="text-muted small mb-0">{{ mod.desc }}</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
