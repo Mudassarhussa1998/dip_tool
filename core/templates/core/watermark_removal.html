@@ -1,0 +1,440 @@
+{% extends 'core/base.html' %}
+{% block title %}Watermark Removal — DIP Lab Tool{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h2 class="fw-bold mb-1">
+      <i class="bi bi-eraser-fill text-primary me-2"></i>Watermark Removal
+    </h2>
+    <p class="text-muted mb-0">Upload an image, detect the watermark region, and remove it using inpainting or frequency-domain techniques.</p>
+  </div>
+  <button class="btn btn-outline-primary btn-sm" onclick="showTheory()">
+    <i class="bi bi-book me-1"></i>Theory
+  </button>
+</div>
+
+<div class="row g-4">
+
+  <!-- ── Upload ─────────────────────────────────────────────────────────── -->
+  <div class="col-12">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-upload me-2 text-primary"></i>Upload Image</h6>
+
+        <div class="upload-zone" id="uploadZone">
+          <i class="bi bi-image fs-1 text-muted mb-2"></i>
+          <p class="mb-1 fw-semibold">Drag &amp; drop or click to upload</p>
+          <p class="text-muted small mb-0">PNG, JPG, BMP — max 20 MB</p>
+          <input type="file" id="imageInput" accept="image/*" class="d-none">
+        </div>
+
+        <!-- Preview + success alert -->
+        <div id="uploadPreview" class="mt-3 d-none">
+          <div class="alert alert-success d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+            <i class="bi bi-check-circle-fill fs-5"></i>
+            <span><strong>Image uploaded successfully!</strong> Configure the settings below and click <em>Remove Watermark</em>.</span>
+          </div>
+          <div class="d-flex align-items-start gap-3 flex-wrap">
+            <div>
+              <p class="text-muted small mb-1">Uploaded Image</p>
+              <img id="previewImg" class="img-fluid rounded border shadow-sm"
+                   style="max-height:220px;max-width:340px" alt="Preview">
+            </div>
+            <div id="uploadMeta" class="small text-muted mt-1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Controls ───────────────────────────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div class="card border-0 h-100">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-sliders me-2 text-primary"></i>Settings</h6>
+
+        <!-- Detection method -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Detection Method</label>
+          <select class="form-select" id="detectionMethod">
+            <option value="bright">Bright / White Watermark</option>
+            <option value="dark">Dark / Black Watermark</option>
+            <option value="edges">Edge-based Detection</option>
+            <option value="saturation">Low-Saturation Overlay</option>
+            <option value="frequency">Frequency Domain (Periodic)</option>
+          </select>
+          <div class="form-text">Choose based on the type of watermark in your image.</div>
+        </div>
+
+        <!-- Removal method -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Removal Method</label>
+          <select class="form-select" id="removalMethod">
+            <option value="telea">Inpainting — Telea (Fast Marching)</option>
+            <option value="ns">Inpainting — Navier-Stokes</option>
+            <option value="median">Median Fill</option>
+            <option value="gaussian">Gaussian Fill</option>
+            <option value="frequency_notch">Frequency Notch Filter</option>
+          </select>
+        </div>
+
+        <!-- Threshold (hidden for frequency/edges) -->
+        <div id="thresholdGroup" class="mb-3">
+          <label class="form-label d-flex justify-content-between">
+            Detection Threshold
+            <span class="badge bg-secondary" id="thresholdVal">200</span>
+          </label>
+          <input type="range" class="form-range" id="threshold"
+                 min="50" max="254" value="200"
+                 oninput="document.getElementById('thresholdVal').textContent=this.value">
+          <div class="form-text">Higher = only very bright/dark pixels detected.</div>
+        </div>
+
+        <!-- Dilation -->
+        <div class="mb-3">
+          <label class="form-label d-flex justify-content-between">
+            Mask Dilation
+            <span class="badge bg-secondary" id="dilateVal">3</span>
+          </label>
+          <input type="range" class="form-range" id="dilateIter"
+                 min="0" max="10" value="3"
+                 oninput="document.getElementById('dilateVal').textContent=this.value">
+          <div class="form-text">Expands the detected mask to cover watermark edges.</div>
+        </div>
+
+        <!-- Inpaint radius -->
+        <div class="mb-3" id="inpaintRadiusGroup">
+          <label class="form-label d-flex justify-content-between">
+            Inpaint Radius
+            <span class="badge bg-secondary" id="inpaintRadiusVal">5</span>
+          </label>
+          <input type="range" class="form-range" id="inpaintRadius"
+                 min="1" max="20" value="5"
+                 oninput="document.getElementById('inpaintRadiusVal').textContent=this.value">
+        </div>
+
+        <hr class="my-3">
+
+        <button class="btn btn-primary w-100 mb-2" id="btnRemove">
+          <i class="bi bi-eraser me-1"></i>Remove Watermark
+        </button>
+        <button class="btn btn-outline-secondary w-100 mb-2" id="btnDetectOnly">
+          <i class="bi bi-search me-1"></i>Detect Mask Only
+        </button>
+        <button class="btn btn-outline-success w-100" id="btnCompareAll">
+          <i class="bi bi-grid-3x3 me-1"></i>Compare All Methods
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Result ─────────────────────────────────────────────────────────── -->
+  <div class="col-lg-8">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-eye me-2 text-primary"></i>Result</h6>
+
+        <div class="row g-3">
+          <div class="col-md-4">
+            <p class="text-muted small mb-1">Original</p>
+            <img id="origDisplay" class="img-fluid rounded border"
+                 style="min-height:120px;background:#f8f9fa;width:100%" alt="Original">
+          </div>
+          <div class="col-md-4">
+            <p class="text-muted small mb-1">Detected Mask</p>
+            <img id="maskDisplay" class="img-fluid rounded border"
+                 style="min-height:120px;background:#f8f9fa;width:100%" alt="Mask">
+          </div>
+          <div class="col-md-4">
+            <p class="text-muted small mb-1">Cleaned Image</p>
+            <img id="resultDisplay" class="img-fluid rounded border"
+                 style="min-height:120px;background:#f8f9fa;width:100%" alt="Result">
+          </div>
+        </div>
+
+        <!-- Metrics row -->
+        <div id="metricsRow" class="mt-3 d-none">
+          <div class="row g-2">
+            <div class="col-auto">
+              <span class="badge bg-primary fs-6 px-3 py-2">
+                <i class="bi bi-clock me-1"></i>
+                <span id="procTime">—</span> ms
+              </span>
+            </div>
+            <div class="col-auto">
+              <span class="badge bg-success fs-6 px-3 py-2" id="maskCoverage">
+                Mask: —
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Download button -->
+        <div id="downloadRow" class="mt-3 d-none">
+          <button class="btn btn-success btn-sm" id="btnDownload">
+            <i class="bi bi-download me-1"></i>Download Cleaned Image
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Compare All Methods Grid ───────────────────────────────────────── -->
+  <div class="col-12" id="compareSection" style="display:none">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3">
+          <i class="bi bi-grid me-2 text-primary"></i>All Removal Methods Comparison
+        </h6>
+        <div class="row g-3" id="compareGrid">
+          {% for method in removal_methods %}
+          <div class="col-md-6 col-xl-4">
+            <div class="card border method-result-card" id="ccard_{{ method.key }}">
+              <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span class="fw-semibold small">{{ method.label }}</span>
+                <span class="badge bg-secondary small" id="ctime_{{ method.key }}">—</span>
+              </div>
+              <div class="card-body p-2">
+                <img id="cimg_{{ method.key }}" class="img-fluid rounded"
+                     style="min-height:100px;background:#f8f9fa;width:100%" alt="{{ method.label }}">
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Time Chart ─────────────────────────────────────────────────────── -->
+  <div class="col-lg-6" id="timeChartSection" style="display:none">
+    <div class="card border-0">
+      <div class="card-body p-4">
+        <h6 class="fw-semibold mb-3">
+          <i class="bi bi-clock me-2 text-primary"></i>Processing Time (ms)
+        </h6>
+        <canvas id="timeChart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /row -->
+
+<!-- ── Theory Modal ───────────────────────────────────────────────────────── -->
+<div class="modal fade" id="theoryModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Watermark Removal — Theory</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <h6>What is a Watermark?</h6>
+        <p>A watermark is a visible or semi-transparent overlay (text, logo, pattern) added to an image to indicate ownership or prevent unauthorised use.</p>
+
+        <h6 class="mt-3">Detection Strategies</h6>
+        <ul>
+          <li><strong>Bright/Dark threshold:</strong> Pixels above (or below) a luminance threshold are flagged as watermark.</li>
+          <li><strong>Edge-based:</strong> Strong edge clusters (Canny) indicate text or logo boundaries.</li>
+          <li><strong>Saturation:</strong> Semi-transparent grey/white overlays have low colour saturation.</li>
+          <li><strong>Frequency domain:</strong> Periodic watermarks produce distinct peaks in the FFT magnitude spectrum.</li>
+        </ul>
+
+        <h6 class="mt-3">Inpainting (Telea / Navier-Stokes)</h6>
+        <p>Inpainting reconstructs the masked region by propagating texture from the surrounding unmasked pixels.</p>
+        <p>Telea uses a fast marching method; Navier-Stokes uses fluid-dynamics equations for smoother fills.</p>
+
+        <h6 class="mt-3">Frequency Notch Filtering</h6>
+        <p>For periodic watermarks, the FFT spectrum shows isolated bright peaks. Zeroing those peaks (notch filter) and inverting the transform removes the periodic pattern:</p>
+        <p>$\hat{F}(u,v) = F(u,v) \cdot (1 - N(u,v))$</p>
+        <p>where $N(u,v)$ is the notch mask.</p>
+
+        <h6 class="mt-3">Median / Gaussian Fill</h6>
+        <p>Simpler alternatives: replace masked pixels with the local median or Gaussian-blurred value. Fast but less accurate for complex backgrounds.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let uploadedImage = null;
+let resultDataUrl = null;
+let timeChartInst = null;
+
+// ── Upload zone ────────────────────────────────────────────────────────────
+const uploadZone  = document.getElementById('uploadZone');
+const imageInput  = document.getElementById('imageInput');
+
+uploadZone.addEventListener('click', () => imageInput.click());
+uploadZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadZone.classList.add('drag-over');
+});
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+imageInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadedImage = e.target.result;
+
+    // Show preview
+    document.getElementById('previewImg').src = uploadedImage;
+    document.getElementById('uploadPreview').classList.remove('d-none');
+    document.getElementById('origDisplay').src = uploadedImage;
+
+    // Show file meta
+    const kb = (file.size / 1024).toFixed(1);
+    document.getElementById('uploadMeta').innerHTML =
+      `<strong>${file.name}</strong><br>${kb} KB &nbsp;·&nbsp; ${file.type}`;
+
+    // Reset result area
+    document.getElementById('maskDisplay').src = '';
+    document.getElementById('resultDisplay').src = '';
+    document.getElementById('metricsRow').classList.add('d-none');
+    document.getElementById('downloadRow').classList.add('d-none');
+    document.getElementById('compareSection').style.display = 'none';
+    document.getElementById('timeChartSection').style.display = 'none';
+    resultDataUrl = null;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Show/hide threshold control based on detection method ─────────────────
+document.getElementById('detectionMethod').addEventListener('change', function () {
+  const hide = ['frequency', 'edges'].includes(this.value);
+  document.getElementById('thresholdGroup').style.display = hide ? 'none' : '';
+});
+
+// ── Show/hide inpaint radius based on removal method ──────────────────────
+document.getElementById('removalMethod').addEventListener('change', function () {
+  const show = ['telea', 'ns'].includes(this.value);
+  document.getElementById('inpaintRadiusGroup').style.display = show ? '' : 'none';
+});
+
+// ── Collect params ─────────────────────────────────────────────────────────
+function getParams() {
+  return {
+    detection_method: document.getElementById('detectionMethod').value,
+    removal_method:   document.getElementById('removalMethod').value,
+    threshold:        parseInt(document.getElementById('threshold').value),
+    dilate_iter:      parseInt(document.getElementById('dilateIter').value),
+    inpaint_radius:   parseInt(document.getElementById('inpaintRadius').value),
+  };
+}
+
+// ── Remove watermark ───────────────────────────────────────────────────────
+document.getElementById('btnRemove').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Please upload an image first.'); return; }
+  showSpinner();
+  const resp = await postAPI('/api/watermark-removal/', {
+    image: uploadedImage,
+    operation: 'remove',
+    params: getParams(),
+  });
+  hideSpinner();
+  if (resp.error) { alert('Error: ' + resp.error); return; }
+
+  document.getElementById('maskDisplay').src   = resp.mask_image;
+  document.getElementById('resultDisplay').src = resp.result_image;
+  resultDataUrl = resp.result_image;
+
+  document.getElementById('procTime').textContent = resp.processing_time_ms;
+  document.getElementById('maskCoverage').textContent =
+    'Mask coverage: ' + resp.mask_coverage_pct + '%';
+  document.getElementById('metricsRow').classList.remove('d-none');
+  document.getElementById('downloadRow').classList.remove('d-none');
+});
+
+// ── Detect mask only ───────────────────────────────────────────────────────
+document.getElementById('btnDetectOnly').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Please upload an image first.'); return; }
+  showSpinner();
+  const resp = await postAPI('/api/watermark-removal/', {
+    image: uploadedImage,
+    operation: 'detect',
+    params: getParams(),
+  });
+  hideSpinner();
+  if (resp.error) { alert('Error: ' + resp.error); return; }
+
+  document.getElementById('maskDisplay').src = resp.mask_image;
+  document.getElementById('procTime').textContent = resp.processing_time_ms;
+  document.getElementById('maskCoverage').textContent =
+    'Mask coverage: ' + resp.mask_coverage_pct + '%';
+  document.getElementById('metricsRow').classList.remove('d-none');
+});
+
+// ── Compare all methods ────────────────────────────────────────────────────
+document.getElementById('btnCompareAll').addEventListener('click', async () => {
+  if (!uploadedImage) { alert('Please upload an image first.'); return; }
+  showSpinner();
+  const resp = await postAPI('/api/watermark-removal/', {
+    image: uploadedImage,
+    operation: 'compare',
+    params: getParams(),
+  });
+  hideSpinner();
+  if (resp.error) { alert('Error: ' + resp.error); return; }
+
+  document.getElementById('maskDisplay').src = resp.mask_image;
+  document.getElementById('compareSection').style.display = '';
+  document.getElementById('timeChartSection').style.display = '';
+
+  const methods = ['telea', 'ns', 'median', 'gaussian', 'frequency_notch'];
+  const timeData = {};
+  methods.forEach(m => {
+    if (resp[m]) {
+      document.getElementById('cimg_' + m).src = resp[m];
+      document.getElementById('ctime_' + m).textContent =
+        (resp[m + '_time'] || '—') + ' ms';
+      timeData[m] = resp[m + '_time'] || 0;
+    }
+  });
+
+  // Time chart
+  if (timeChartInst) timeChartInst.destroy();
+  timeChartInst = new Chart(document.getElementById('timeChart'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(timeData).map(k => k.replace('_', ' ').toUpperCase()),
+      datasets: [{
+        label: 'Time (ms)',
+        data: Object.values(timeData),
+        backgroundColor: '#4f6ef7',
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+});
+
+// ── Download ───────────────────────────────────────────────────────────────
+document.getElementById('btnDownload').addEventListener('click', () => {
+  if (!resultDataUrl) return;
+  downloadImage(resultDataUrl, 'watermark_removed.png');
+});
+
+// ── Theory modal ───────────────────────────────────────────────────────────
+function showTheory() {
+  new bootstrap.Modal(document.getElementById('theoryModal')).show();
+  if (window.MathJax) MathJax.typesetPromise();
+}
+</script>
+{% endblock %}

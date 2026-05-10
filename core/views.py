@@ -1019,3 +1019,104 @@ def api_colour(request):
     except Exception as e:
         return _json_error(str(e))
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Watermark Removal — Page view
+# ─────────────────────────────────────────────────────────────────────────────
+
+def watermark_removal(request):
+    removal_methods = [
+        {'key': 'telea',           'label': 'Inpainting — Telea'},
+        {'key': 'ns',              'label': 'Inpainting — Navier-Stokes'},
+        {'key': 'median',          'label': 'Median Fill'},
+        {'key': 'gaussian',        'label': 'Gaussian Fill'},
+        {'key': 'frequency_notch', 'label': 'Frequency Notch'},
+    ]
+    return render(request, 'core/watermark_removal.html', {
+        'removal_methods': removal_methods,
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Watermark Removal — API endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+from .utils import watermark_removal as wm_utils
+
+
+@csrf_exempt
+def api_watermark_removal(request):
+    if request.method != 'POST':
+        return _json_error('POST required')
+    t0 = time.time()
+    data = _parse_body(request)
+    img_b64 = data.get('image', '')
+    if not img_b64:
+        return _json_error('No image provided')
+    try:
+        img = _decode_image(img_b64)
+        operation = data.get('operation', 'remove')
+        params = data.get('params', {})
+
+        detection_method = params.get('detection_method', 'bright')
+        removal_method   = params.get('removal_method', 'telea')
+        threshold        = int(params.get('threshold', 200))
+        dilate_iter      = int(params.get('dilate_iter', 3))
+        inpaint_radius   = int(params.get('inpaint_radius', 5))
+        notch_radius     = int(params.get('notch_radius', 10))
+
+        if operation == 'detect':
+            # Only detect and return the mask (no removal)
+            result = wm_utils.remove_watermark(
+                img,
+                detection_method=detection_method,
+                removal_method='telea',   # removal not used, but pipeline needs it
+                threshold=threshold,
+                dilate_iter=dilate_iter,
+                inpaint_radius=inpaint_radius,
+                notch_radius=notch_radius,
+            )
+            return JsonResponse({
+                'mask_image': _encode_image(result['mask']),
+                'mask_coverage_pct': result['mask_coverage_pct'],
+                'processing_time_ms': result['processing_time_ms'],
+            })
+
+        elif operation == 'remove':
+            result = wm_utils.remove_watermark(
+                img,
+                detection_method=detection_method,
+                removal_method=removal_method,
+                threshold=threshold,
+                dilate_iter=dilate_iter,
+                inpaint_radius=inpaint_radius,
+                notch_radius=notch_radius,
+            )
+            return JsonResponse({
+                'result_image': _encode_image(result['result']),
+                'mask_image': _encode_image(result['mask']),
+                'mask_coverage_pct': result['mask_coverage_pct'],
+                'processing_time_ms': result['processing_time_ms'],
+            })
+
+        elif operation == 'compare':
+            results, mask = wm_utils.compare_all_methods(
+                img,
+                detection_method=detection_method,
+                threshold=threshold,
+                dilate_iter=dilate_iter,
+            )
+            coverage = wm_utils._mask_coverage_pct(mask)
+            response = {
+                'mask_image': _encode_image(mask),
+                'mask_coverage_pct': coverage,
+                'processing_time_ms': round((time.time() - t0) * 1000, 2),
+            }
+            for name, r in results.items():
+                response[name] = _encode_image(r['image'])
+                response[f'{name}_time'] = r['time']
+            return JsonResponse(response)
+
+        return _json_error('Unknown operation')
+    except Exception as e:
+        return _json_error(str(e))

@@ -113,6 +113,11 @@
           <i class="bi bi-circle me-2"></i>15. Colour Processing & ML
         </a>
       </li>
+      <li class="nav-item">
+        <a class="nav-link {% if url_name == 'watermark_removal' %}active{% endif %}" href="{% url 'watermark_removal' %}">
+          <i class="bi bi-eraser-fill me-2"></i>Watermark Removal
+        </a>
+      </li>
       {% endwith %}
     </ul>
   </nav>

@@ -18,6 +18,7 @@ urlpatterns = [
     path('morphology/', views.morphology_page, name='morphology'),
     path('compression/', views.compression_page, name='compression'),
     path('colour/', views.colour, name='colour'),
+    path('watermark-removal/', views.watermark_removal, name='watermark_removal'),
 
     # ── API routes ────────────────────────────────────────────────────────────
     path('api/intro/', views.api_intro, name='api_intro'),
@@ -34,4 +35,5 @@ urlpatterns = [
     path('api/morphology/', views.api_morphology, name='api_morphology'),
     path('api/compression/', views.api_compression, name='api_compression'),
     path('api/colour/', views.api_colour, name='api_colour'),
+    path('api/watermark-removal/', views.api_watermark_removal, name='api_watermark_removal'),
 ]

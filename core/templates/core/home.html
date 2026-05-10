@@ -28,5 +28,22 @@
     </a>
   </div>
   {% endfor %}
+
+  <!-- Watermark Removal tool card -->
+  <div class="col-md-6 col-xl-4">
+    <a href="{% url 'watermark_removal' %}" class="text-decoration-none">
+      <div class="card module-card h-100 border-0" style="border-left: 4px solid var(--accent) !important;">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="module-icon" style="background:linear-gradient(135deg,#4f6ef7,#22c55e)">
+              <i class="bi bi-eraser-fill text-white"></i>
+            </div>
+            <h6 class="mb-0 fw-semibold">Watermark Removal</h6>
+          </div>
+          <p class="text-muted small mb-0">Upload any watermarked image and remove it using inpainting, frequency notch filtering, or fill-based methods.</p>
+        </div>
+      </div>
+    </a>
+  </div>
 </div>
 {% endblock %}
